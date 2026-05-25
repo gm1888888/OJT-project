@@ -1,0 +1,22 @@
+{
+  "Project Metadata": [
+    { "field": "Project Name / Ref No", "cell": "Software!B7", "type": "Text", "source": "project_name" },
+    { "field": "Client Name", "cell": "Dash Board!D7", "type": "Text", "source": "client_name" },
+    { "field": "Client Address", "cell": "Dash Board!D8", "type": "Text", "source": "address_1" },
+    { "field": "Requesting Official", "cell": "Dash Board!D10", "type": "Text", "source": "official" },
+    { "field": "Calibration Date", "cell": "Software!B6", "type": "Date", "source": "date" }
+  ],
+  "Instrument Configuration": [
+    { "field": "Calibration Mode", "cell": "Software!F6", "type": "Dropdown", "options": ["Compression", "Tension"], "source": "mode" },
+    { "field": "Machine Capacity", "cell": "Software!F7", "type": "Number", "source": "capacity" },
+    { "field": "Increment / Graduation", "cell": "Software!F9", "type": "Selection", "options": ["0.01", "0.1", "1.0"], "source": "increment" },
+    { "field": "Resolution", "cell": "Software!F10", "type": "Selection", "options": ["0.01", "0.1", "1.0"], "source": "resolution" },
+    { "field": "Display Unit", "cell": "Software!K11", "type": "Selection", "options": ["kgf", "lbf", "N", "kN"], "source": "unit" }
+  ],
+  "Measurement Inputs (Data Logger)": [
+    { "field": "Target Force (Row N)", "cell": "Data Logger!A[11+n]", "type": "Number", "source": "points.target" },
+    { "field": "Run 1 (0°)", "cell": "Data Logger!B[11+n]", "type": "Number", "source": "points.s1" },
+    { "field": "Run 2 (120°)", "cell": "Data Logger!D[11+n]", "type": "Number", "source": "points.s2" },
+    { "field": "Run 3 (240°)", "cell": "Data Logger!F[11+n]", "type": "Number", "source": "points.s3" }
+  ]
+}

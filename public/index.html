@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>DMP41 Calibration System</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #modal-history-view, #modal-history-view * { visibility: visible; }
+      #modal-history-view { position: absolute; left: 0; top: 0; width: 100%; }
+      .controls, button, .close { display: none !important; }
+    }
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+    .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-height: 80vh; overflow-y: auto; }
+    .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+    .close:hover, .close:focus { color: black; text-decoration: none; cursor: pointer; }
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; font-weight: bold;}
+    .form-group input { width: 100%; padding: 8px; box-sizing: border-box; }
+    .modal-actions { text-align: right; margin-top: 20px; }
+    
+    /* Responsive Settings Modal Styles */
+    #modal-settings .modal-content, #modal-terminal .modal-content { 
+      position: fixed; 
+      right: 0; 
+      top: 0; 
+      width: 50%; 
+      height: 100vh; 
+      margin: 0; 
+      max-height: none; 
+      border-radius: 0; 
+      overflow-y: auto; 
+      box-sizing: border-box; 
+      padding-top: 60px; /* space for fixed close button */
+    }
+    #close-settings, #close-terminal {
+      position: fixed;
+      top: 15px;
+      right: 25px;
+      z-index: 1001;
+      background: white;
+      padding: 0 10px;
+      border-radius: 50%;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+    .settings-box { border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+    .settings-inline-group { display: flex; flex-wrap: wrap; gap: 10px; }
+    .settings-inline-group > .form-group { flex: 1 1 calc(50% - 10px); min-width: 120px; margin-bottom: 0; }
+    
+    @media (max-width: 800px) {
+      #modal-settings .modal-content, #modal-terminal .modal-content { width: 100%; }
+      .settings-inline-group > .form-group { flex: 1 1 100%; }
+      .settings-grid { grid-template-columns: 1fr; }
+    }
+
+    #dashboard { padding-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <!-- Main Dashboard -->
+  <div id="dashboard" class="container">
+    <header>
+      <h1>DMP41 Calibration System</h1>
+      <nav>
+        <a href="#monitor">Live Monitor</a>
+        <a href="#" id="nav-history-link-btn">History</a>
+        <a href="#" id="nav-settings">Settings</a>
+      </nav>
+    </header>
+
+    <!-- Project Toolbar (Step 1 of Workflow) -->
+    <section id="project-toolbar" class="panel full-width" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+      <div style="display: flex; gap: 10px; border: 1px solid #ddd; padding: 5px; border-radius: 5px; background: #f9f9f9;">
+        <button id="btn-new-project" >New Project</button>
+        <button id="btn-load-demo" >🧪 Load Demo Data</button>
+      </div>
+    </section>
+
+    <!-- Step 1: Project Descriptions -->
+    <section id="project-descriptions" class="panel full-width" style="margin-bottom: 20px;">
+      <h2>1. Project Descriptions</h2>
+      <div class="replica-section">
+        <h3>DESCRIPTION OF THE INSTRUMENT</h3>
+        <table class="excel-table table-1">
+          <tr><td class="excel-label">Date of Calibration:</td><td class="excel-input"><input type="date" id="t1-date"></td><td class="excel-label">Mode:</td><td class="excel-input"><select id="t1-mode"><option>Compression</option><option>Tension</option></select></td></tr>
+          <tr><td class="excel-label">Request Ref. No.:</td><td class="excel-input"><input type="text" id="t1-ref-no" placeholder="E.g. 01-2019-FORC-0007"></td><td class="excel-label">Capacity:</td><td class="excel-input"><input type="text" id="t1-capacity" placeholder="E.g. 200 kgf"></td></tr>
+          <tr><td class="excel-label">Calibration Item:</td><td class="excel-input"><input type="text" id="t1-item" placeholder="E.g. Edge Crush Testing Machine"></td><td class="excel-label">Range:</td><td class="excel-input"><input type="text" id="t1-range" placeholder="E.g. 0 kgf to 100 kgf"></td></tr>
+          <tr><td class="excel-label">Make / Model No.:</td><td class="excel-input"><input type="text" id="t1-make" placeholder="E.g. Hung Ta"></td><td class="excel-label">Increment:</td><td class="excel-input"><input type="text" id="t1-increment" placeholder="E.g. 0.01 kgf"></td></tr>
+          <tr><td class="excel-label">Serial No. / ID No.:</td><td class="excel-input"><input type="text" id="t1-sn" placeholder="E.g. 309052"></td><td class="excel-label">Resolution:</td><td class="excel-input"><input type="text" id="t1-resolution" placeholder="E.g. 0.01 kgf"></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- Hardware Status Panel (Step 2 of Workflow) -->
+      <section id="hardware-status" class="panel full-width">
+        <h2>2. Settings (Hardware & Setup)</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+          
+          <div class="status-box">
+            <h3 style="font-size: 1em; margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Reference & System</h3>
+            <div style="margin-bottom: 10px;">
+              <label style="font-size: 0.85em; font-weight: bold;">Reference Standard:</label>
+              <select id="lc-selector" style="width: 100%; padding: 5px; margin-top: 3px;">
+                <option value="">Loading database...</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 10px;">
+              <label style="font-size: 0.85em; font-weight: bold;">System Unit:</label>
+              <div style="display: flex; gap: 5px; margin-top: 3px;">
+                <button class="unit-btn" data-unit="kgf" >kgf</button>
+                <button class="unit-btn" data-unit="kN" >kN</button>
+                <button class="unit-btn" data-unit="lbf" >lbf</button>
+                <button class="unit-btn" data-unit="N" >N</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="status-box">
+            <h3 style="font-size: 1em; margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Connection Settings</h3>
+            <p>Connection: <span id="conn-status">Checking...</span></p>
+            <p>Address: <span id="disp-address">...</span></p>
+            <p>Port: <span id="disp-port">...</span></p>
+            <p>
+              Mode: 
+              <select id="hw-mode-select">
+                <option value="" disabled selected>Select Mode</option>
+                <option value="demo">Demo</option>
+                <option value="live">Live</option>
+              </select>
+            </p>
+            <div style="margin-top: 10px;">
+              <button id="btn-connect" disabled>Connect</button>
+              <button id="btn-terminal">Terminal</button>
+            </div>
+          </div>
+
+          <div class="status-box">
+            <h3 style="font-size: 1em; margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Settings Configuration</h3>
+            <p style="font-size: 0.9em; margin-bottom: 2px;">Instrument: <span id="disp-instrument">DMP41</span></p>
+            <p style="font-size: 0.9em; margin-bottom: 2px;">Channel: <span id="disp-channel">1</span></p>
+            <p style="font-size: 0.9em; margin-bottom: 2px;">Rate: <span id="disp-reading-rate">1 reading/sec</span></p>
+            <p style="font-size: 0.9em; margin-bottom: 2px;">Method: <span id="disp-method">E. Sequence-2</span></p>
+            <p style="font-size: 0.9em; margin-bottom: 2px;">Meas Time/Int: <span id="disp-meas-time">1</span> sec</p>
+            <p style="font-size: 0.9em; margin-bottom: 2px;">File Style: <span id="disp-save-style">KC</span></p>
+            <p style="font-size: 0.9em; margin-bottom: 2px;">Calc Avg: <span id="disp-avg">Yes</span></p>
+            <div style="margin-top: 10px;">
+              <button id="btn-config">Advanced Settings</button>
+            </div>
+          </div>
+          
+        </div>
+      </section>
+
+      <!-- Real-Time Monitor -->
+      <div id="live-monitor-placeholder"></div>
+      <section id="live-monitor" class="panel full-width" style="margin-top: 20px;">
+        <h2>3. Capturing (Live Force Reading)</h2>
+        <div id="live-monitor-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: stretch;">
+          
+          <div style="display: flex; flex-direction: column; justify-content: space-between;">
+            <div class="reading-display" style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 40px; margin: 0; flex-grow: 1;">
+              
+              <!-- Primary: mV/V -->
+              <div style="display: flex; align-items: baseline;">
+                <div class="value" id="reading-mvv">0.000000</div>
+                <div class="unit">mV/V</div>
+              </div>
+
+              <div style="width: 1px; height: 50px; background-color: #ccc;"></div>
+
+              <!-- Secondary: Calculated kgf -->
+              <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center;">
+                <div style="display: flex; align-items: baseline; gap: 5px;">
+                  <span id="reading-kgf" style="font-weight: bold; color: #000; font-size: 2em;">0.000</span>
+                  <span id="reading-unit" style="color: #000; font-size: 1.2em;">kgf</span>
+                </div>
+                <span style="font-size: 0.9em; color: #000;">Calculated Force</span>
+              </div>
+
+            </div>
+            
+            <div class="controls" style="margin-top: 20px;">
+              <button id="btn-start-polling" disabled>Start Polling</button>
+              <button id="btn-stop-polling" disabled>Stop Polling</button>
+            </div>
+            <button id="btn-excel-capture" >📸 Capture to Selected Cell</button>
+            <div id="calibration-status-bar" style="margin-top: 15px; background: #eee; padding: 10px; border-radius: 4px; display: none;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <span id="status-text" style="font-weight: bold; color: #333;">Initializing...</span>
+                <span id="status-percent" style="color: #666;">0%</span>
+              </div>
+              <div style="width: 100%; background-color: #ddd; height: 10px; border-radius: 5px; overflow: hidden;">
+                <div id="progress-bar" style="width: 0%; height: 100%; background-color: #4CAF50; transition: width 0.3s;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-container" style="margin: 0; height: auto; min-height: 250px;">
+            <canvas id="chart-readings"></canvas>
+          </div>
+          
+        </div>
+      </section>
+
+      <!-- Excel Full Replica: Tables 2 to 5 -->
+      <section id="excel-full-replica" class="panel full-width" style="margin-top: 20px;">
+        <h2>4. Calibration Data Tables</h2>
+        
+        <!-- Table 2: Pre-Loading -->
+        <div class="replica-section">
+          <h3>2.) PRE-LOADING DATA, kgf</h3>
+          <table class="excel-table table-2">
+            <thead>
+              <tr class="excel-header-main">
+                <th>Indicated force</th><th>1st (0˚)</th><th>Indicated force</th><th> 2nd (120˚)</th><th>Indicated force</th><th>3rd (240˚)</th>
+              </tr>
+              <tr class="excel-header-sub">
+                <th>Machine</th><th>Reading</th><th>Machine</th><th>Reading</th><th>Machine</th><th>Reading</th>
+              </tr>
+            </thead>
+            <tbody id="t2-body">
+              <!-- JS rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Table 3: Measured Data -->
+        <div class="replica-section">
+          <h3>3.) MEASURED DATA, kgf</h3>
+          <table class="excel-table table-3">
+            <thead>
+              <tr class="excel-header-main">
+                <th rowspan="2">Calibration Points</th><th rowspan="2">Expected Machine Indication</th><th>Indicated force</th><th>1st (0˚)</th><th>Indicated force</th><th> 2nd (120˚)</th><th>Indicated force</th><th>3rd (240˚)</th><th rowspan="2">Mean Force</th><th rowspan="2">Mean deflection</th>
+              </tr>
+              <tr class="excel-header-sub">
+                <th>Machine</th><th>Reading</th><th>Machine</th><th>Reading</th><th>Machine</th><th>Reading</th>
+              </tr>
+            </thead>
+            <tbody id="t3-body">
+              <!-- JS rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+          <div class="replica-section">
+            <h3>3.) Force Transducer Information</h3>
+            <table class="excel-table table-4">
+              <tr><td class="excel-label">Load Cell</td><td id="t4-model">-</td><td class="excel-label">A</td><td id="t4-a">-</td></tr>
+              <tr><td class="excel-label">Capacity</td><td id="t4-cap">-</td><td class="excel-label">B</td><td id="t4-b">-</td></tr>
+              <tr><td class="excel-label">Serial No.</td><td id="t4-sn">-</td><td class="excel-label">C</td><td id="t4-c">-</td></tr>
+              <tr><td class="excel-label">Cal. Cert. No.</td><td id="t4-cert">-</td><td class="excel-label">U, %</td><td id="t4-u">-</td></tr>
+              <tr><td class="excel-label">Cal Date</td><td id="t4-date">-</td><td class="excel-label">k</td><td>2.0</td></tr>
+            </table>
+          </div>
+          <!-- Table 5: Env Conditions -->
+          <div class="replica-section">
+            <h3>4.) Environmental Conditions:</h3>
+            <table class="excel-table table-5">
+              <tr class="excel-header-sub"><th>Thermo-hygrometer indication</th><th>Before</th><th>After</th></tr>
+              <tr><td>Temp:</td><td><input type="number" id="t5-temp-b" placeholder="E.g. 23.0"></td><td><input type="number" id="t5-temp-a" placeholder="E.g. 23.0"></td></tr>
+              <tr><td>Humidity:</td><td><input type="number" id="t5-hum-b" placeholder="E.g. 40.0"></td><td><input type="number" id="t5-hum-a" placeholder="E.g. 40.0"></td></tr>
+            </table>
+          </div>
+        </section>
+
+        <!-- Analysis and Results Panel (Step 4 of Workflow) -->
+        <section id="analysis-tables" class="panel full-width" style="margin-top: 20px;">
+          <h2>Analysis & Final Results</h2>
+
+          <!-- Table 6: Net value & Mean Value -->
+          <div class="replica-section">
+            <h3>5.) Net value (dij) & Mean Value (di) Calculation, units in kN</h3>
+          <table class="excel-table table-6">
+            <thead>
+              <tr class="excel-header-main">
+                <th>Calibration Points</th><th>Force (kN)</th><th>1st (0˚)</th><th>Force (kN)</th><th> 2nd (120˚)</th><th>Force (kN)</th><th>3rd (240˚)</th><th>Mean Force (kN)</th><th>Mean deflection</th>
+              </tr>
+            </thead>
+            <tbody id="t6-body"></tbody>
+          </table>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Table 7: Linear Interpolation -->
+            <div class="replica-section">
+                <h3>6.) Linear Interpolation</h3>
+                <table class="excel-table table-7">
+                    <thead><tr class="excel-header-main"><th>Force (kN)</th><th>1st (0˚)</th><th>2nd (120˚)</th><th>3rd (240˚)</th><th>Mean Value</th></tr></thead>
+                    <tbody id="t7-body"></tbody>
+                </table>
+            </div>
+            <!-- Table 8: Estimation of Reference Force -->
+            <div class="replica-section">
+                <h3>7. Estimation of Reference Force</h3>
+                <table class="excel-table table-8">
+                    <thead><tr class="excel-header-main"><th>Force (kN)</th><th>1st (0˚)</th><th>2nd (120˚)</th><th>3rd (240˚)</th><th>Mean Value</th></tr></thead>
+                    <tbody id="t8-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Table 9: Uncertainty (Final) -->
+        <div class="replica-section">
+          <h3>8.) Uncertainty Calculations</h3>
+          <table class="excel-table table-9">
+            <thead>
+              <tr class="excel-header-main">
+                <th>Calibration Points</th>
+                <th>wrep,i (%)</th>
+                <th>wres,i (%)</th>
+                <th>wstd (%)</th>
+                <th>wci (%)</th>
+                <th>Wi (%)</th>
+                <th>qi (%)</th>
+                <th>bi (%)</th>
+                <th>f0 (%)</th>
+                <th>Class</th>
+              </tr>
+            </thead>
+            <tbody id="t9-body"></tbody>
+          </table>
+        </div>
+
+        <div class="controls" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px; background: #eee; padding: 15px; border-radius: 8px;">
+          <button id="btn-save-history" >Save Current</button>
+          <button id="btn-excel-export" >Export</button>
+          <button id="btn-excel-clear" >Reset All Worksheet Data</button>
+        </div>
+        </section>
+        </div>
+
+        <!-- History List Modal -->  <div id="modal-history-list" class="modal">
+    <div class="modal-content" style="max-width: 900px; display: flex; flex-direction: column;">
+      <span class="close" id="close-history-list">&times;</span>
+      <h2 style="flex-shrink: 0;">Calibration History</h2>
+      <div id="history-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-top: 15px; overflow-y: auto; flex-grow: 1; padding-right: 10px;">
+        <p>No history found. Complete a calibration and click 'Save to History'.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- History View Modal -->
+  <div id="modal-history-view" class="modal">
+    <div class="modal-content" style="max-width: 900px; display: flex; flex-direction: column;">
+      <span class="close" id="close-history-view">&times;</span>
+      <h2 style="flex-shrink: 0;">Historical Calibration Data</h2>
+      <div id="history-project-display" style="flex-shrink: 0; text-align: left; font-size: 0.9em; background: #f9f9f9; padding: 10px; border-radius: 5px; border: 1px solid #eee; margin-bottom: 15px;">
+      </div>
+      <div style="overflow-y: auto; flex-grow: 1; margin-bottom: 20px;">
+        <table style="width: 100%; text-align: center;">
+          <thead>
+            <tr>
+              <th>Point</th><th>Target</th><th>Run 1</th><th>Run 2</th><th>Run 3</th><th>Mean</th><th>Class</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+          </tbody>
+        </table>
+      </div>
+      <div class="controls action-bar" style="flex-shrink: 0; text-align: right; display: flex; justify-content: space-between;">
+        <button id="btn-hist-delete" >Erase Record</button>
+        <div>
+          <button id="btn-hist-manual" >Manual Entry</button>
+          <button id="btn-hist-excel" >Export to Excel</button>
+          <button id="btn-hist-cert">Generate Certificate</button>
+          <button id="btn-hist-csv">Export CSV</button>
+          <button id="btn-hist-print">Print</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="modal-settings" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+      <span class="close" id="close-settings">&times;</span>
+      <h2>Advanced Settings & Data Management</h2>
+      
+      <div class="settings-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+        
+        <div class="settings-box">
+          <h3 style="margin-top:0; border-bottom: 2px solid #ddd; padding-bottom: 5px;">1. Hardware Interface</h3>
+          <div class="form-group">
+            <label>Connection Type</label>
+            <select id="set-conn-type">
+              <option value="tcp">TCP/IP (DMP41 Default)</option>
+              <option value="serial">Serial (Legacy DMP40)</option>
+            </select>
+          </div>
+          <div id="tcp-settings" class="settings-inline-group">
+            <div class="form-group"><label>IP Address</label><input type="text" id="set-ip" value="192.168.1.100"></div>
+            <div class="form-group"><label>Port</label><input type="number" id="set-port" value="1234"></div>
+          </div>
+          <div id="serial-settings" class="settings-inline-group" style="display: none;">
+            <div class="form-group"><label>COM Port</label><select id="set-com"><option>COM1</option><option>COM2</option></select></div>
+            <div class="form-group"><label>Baud Rate</label><select id="set-baud"><option>1200</option><option>2400</option><option selected>4800</option><option>9600</option><option>19200</option><option>38400</option></select></div>
+            <div class="form-group"><label>Parity</label><select id="set-parity"><option>None</option><option>Odd</option><option>Even</option></select></div>
+            <div class="form-group"><label>Data Bits</label><select id="set-data-bits"><option>7</option><option selected>8</option></select></div>
+            <div class="form-group"><label>Stop Bits</label><select id="set-stop-bits"><option selected>1</option><option>2</option></select></div>
+          </div>
+          <div class="settings-inline-group" style="margin-top: 15px;">
+            <div class="form-group"><label>Instrument</label><select id="set-instrument"><option selected>DMP41</option><option>DMP40</option><option>DK38</option><option>FINE</option><option>MGCplus</option></select></div>
+            <div class="form-group"><label>Channel</label><select id="set-channel"><option value="1" selected>Channel 1</option><option value="2">Channel 2</option></select></div>
+          </div>
+        </div>
+
+        <div class="settings-box">
+          <h3 style="margin-top:0; border-bottom: 2px solid #ddd; padding-bottom: 5px;">2. Measurement Settings</h3>
+          <div class="form-group">
+            <label>Reading Method</label>
+            <select id="set-method">
+              <option value="A">A. One Point Reading</option>
+              <option value="B">B. Repeat reading at the same interval</option>
+              <option value="C">C. One point reading after set time</option>
+              <option value="D">D. Reading according to Sequence-1</option>
+              <option value="E" selected>E. Reading according to Sequence-2</option>
+            </select>
+          </div>
+          <div class="settings-inline-group">
+            <div class="form-group">
+              <label>Reading Rate</label>
+              <input type="text" id="set-reading-rate" value="1 reading/sec">
+            </div>
+            <div class="form-group">
+              <label>Loading Points</label>
+              <input type="number" id="set-loading-points" value="10">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Measurement Time / Interval (sec)</label>
+            <input type="number" id="set-meas-time" value="1">
+          </div>
+          <div class="settings-inline-group">
+            <div class="form-group">
+              <label>Output File Style</label>
+              <select id="set-save-style"><option value="KC">KC</option><option value="Testing">Testing</option></select>
+            </div>
+            <div class="form-group">
+              <label>Calculate Average?</label>
+              <select id="set-avg"><option value="Yes">Yes</option><option value="No">No</option></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-box">
+          <h3 style="margin-top:0; border-bottom: 2px solid #ddd; padding-bottom: 5px;">3. Load Cell & Calculations</h3>
+          <p style="margin-top: 0; font-size: 0.85em; color: #555;"><strong>Polynomial (F = AD + BD² + CD³)</strong></p>
+          <div class="settings-inline-group">
+            <div class="form-group"><label>Coeff A</label><input type="number" step="any" id="set-coeff-a" value="1.0"></div>
+            <div class="form-group"><label>Coeff B</label><input type="number" step="any" id="set-coeff-b" value="0.0"></div>
+            <div class="form-group"><label>Coeff C</label><input type="number" step="any" id="set-coeff-c" value="0.0"></div>
+          </div>
+          <div class="form-group">
+            <label>Ref. Standard Uncertainty (%)</label>
+            <input type="number" step="any" id="set-ref-unc" value="0.02">
+          </div>
+          <div class="settings-inline-group">
+            <div class="form-group"><label>Sensitivity (ppm/°C)</label><input type="number" id="set-sensitivity" value="50"></div>
+            <div class="form-group"><label>Resolution (kgf)</label><input type="number" step="0.001" id="set-resolution" value="0.01"></div>
+            <div class="form-group"><label>Stability Threshold (mV/V)</label><input type="number" step="0.000001" id="set-stability" value="0.000010"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="controls" style="margin-top: 20px;">
+        <button id="btn-default-settings" >Restore Defaults</button>
+        <button id="btn-save-settings">Save All Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Project Modal -->
+  <div id="modal-new-project" class="modal">
+    <div class="modal-content" style="max-width: 700px;">
+      <span class="close">&times;</span>
+      <h2>Create New Project</h2>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div class="form-group"><label>Date of Calibration</label><input type="date" id="np-date"></div>
+        <div class="form-group"><label>Mode</label><select id="np-mode"><option>Compression</option><option>Tension</option></select></div>
+        <div class="form-group"><label>Request Ref. No.</label><input type="text" id="np-name" placeholder="E.g. 01-2019-FORC-0007"></div>
+        <div class="form-group"><label>Capacity</label><input type="text" id="np-capacity" placeholder="E.g. 200 kgf"></div>
+        <div class="form-group"><label>Calibration Item</label><input type="text" id="np-item" placeholder="E.g. Edge Crush Testing Machine"></div>
+        <div class="form-group"><label>Range</label><input type="text" id="np-range" placeholder="E.g. 0 kgf to 100 kgf"></div>
+        <div class="form-group"><label>Make / Model No.</label><input type="text" id="np-make" placeholder="E.g. Hung Ta"></div>
+        <div class="form-group"><label>Increment</label><input type="text" id="np-increment" placeholder="E.g. 0.01 kgf"></div>
+        <div class="form-group"><label>Serial No. / ID No.</label><input type="text" id="np-sn" placeholder="E.g. 309052"></div>
+        <div class="form-group"><label>Resolution</label><input type="text" id="np-resolution" placeholder="E.g. 0.01 kgf"></div>
+      </div>
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button id="btn-submit-project">Create Project</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manual Entry Modal -->
+  <div id="modal-manual-entry" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+      <span class="close" id="close-manual-entry">&times;</span>
+      <h2>Manual Data Entry</h2>
+      <p id="me-project-info" style="font-weight: bold; color: #000;"></p>
+      <div style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
+        <table id="me-table" style="width: 100%;">
+          <thead>
+            <tr>
+              <th>Target (kgf)</th>
+              <th>Run 1 (mV/V)</th>
+              <th>Run 2 (mV/V)</th>
+              <th>Run 3 (mV/V)</th>
+            </tr>
+          </thead>
+          <tbody id="me-table-body">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button id="btn-me-add-row" >+ Add Row</button>
+        <button id="btn-me-save" >Save Data Points</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal Modal -->
+  <div id="modal-terminal" class="modal">
+    <div class="modal-content" style="background-color: #1e1e1e; color: #d4d4d4;">
+      <span class="close" id="close-terminal" style="color: #fff;">&times;</span>
+      <h2 style="color: #fff;">DMP41 Command Terminal</h2>
+      <div id="terminal-output" style="height: calc(100vh - 160px); overflow-y: auto; background-color: #000; padding: 10px; font-family: monospace; margin-bottom: 10px; border: 1px solid #333;">
+        <div style="color: #00ff00;">System: Ready. Type <span style="color: #ffcc00;">/help</span> to see usage instructions and available commands.</div>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <input type="text" id="terminal-input" placeholder="Enter ASCII command (e.g. MSV?24, TAR)" style="flex: 1; background-color: #333; color: #fff; border: 1px solid #555; padding: 5px; font-family: monospace;">
+        <button id="btn-terminal-send" >Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/main.js?v=14"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+[
+  { "id": 1, "model": "HBM/C6", "capacity": "2000 kN", "sn": "F42442", "coeff_a": 978.3389, "coeff_b": 35.04818, "coeff_c": -7.94019, "uncertainty": 1.375 },
+  { "id": 2, "model": "HBM/TCBS", "capacity": "500 kN", "sn": "50036", "coeff_a": -247.8101, "coeff_b": 0.4774382, "coeff_c": -0.01014075, "uncertainty": 0.07 },
+  { "id": 3, "model": "HBM/C3H3", "capacity": "10 kN", "sn": "F93007", "coeff_a": 4.902632, "coeff_b": -0.0009307508, "coeff_c": -0.00006355071, "uncertainty": 0.011 },
+  { "id": 4, "model": "HBM/Z3H3", "capacity": "5 kN", "sn": "F73724", "coeff_a": 2.449533, "coeff_b": 0.0003271097, "coeff_c": -0.000173873, "uncertainty": 0.017 },
+  { "id": 5, "model": "HBM/Z3OA", "capacity": "2 kN", "sn": "151730166", "coeff_a": 1000.037, "coeff_b": -0.0910095, "coeff_c": -0.001796771, "uncertainty": 0.024 },
+  { "id": 6, "model": "HBM/Z4A (20kN)", "capacity": "20 kN", "sn": "161430192", "coeff_a": 10.00259, "coeff_b": 0.0007285711, "coeff_c": -0.0005834712, "uncertainty": 0.019 },
+  { "id": 7, "model": "HBM/Z4A (100kN)", "capacity": "100 kN", "sn": "160730020", "coeff_a": 50.03392, "coeff_b": -0.01476225, "coeff_c": -0.002207862, "uncertainty": 0.041 }
+]

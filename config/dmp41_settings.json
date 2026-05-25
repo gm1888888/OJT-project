@@ -1,0 +1,78 @@
+{
+  "connection": {
+    "type": "tcp",
+    "tcp": {
+      "ip": "192.168.0.150",
+      "port": "1234"
+    },
+    "serial": {
+      "com": "COM1",
+      "baud": "4800",
+      "parity": "None",
+      "data_bits": "8",
+      "stop_bits": "1"
+    }
+  },
+  "instrument": "DMP41",
+  "channel": "1",
+  "reading_rate": "1 reading/sec",
+  "method": "E",
+  "meas_time": "1",
+  "save_style": "KC",
+  "avg": "Yes",
+  "coeff_a": "1.0",
+  "coeff_b": "0.0",
+  "coeff_c": "0.0",
+  "ref_unc": "0.02",
+  "sensitivity_ppm": "50",
+  "resolution_kgf": "0.01",
+  "stability_threshold": "0.000010",
+  "loading_points": "10",
+  "sequences": [
+    {
+      "id": 1
+    },
+    {
+      "id": 2
+    },
+    {
+      "id": 3
+    },
+    {
+      "id": 4
+    },
+    {
+      "id": 5
+    },
+    {
+      "id": 6
+    },
+    {
+      "id": 7
+    },
+    {
+      "id": 8
+    },
+    {
+      "id": 9
+    },
+    {
+      "id": 10
+    },
+    {
+      "id": 11
+    },
+    {
+      "id": 12
+    },
+    {
+      "id": 13
+    },
+    {
+      "id": 14
+    },
+    {
+      "id": 15
+    }
+  ]
+}
