@@ -1,86 +1,101 @@
 @echo off
-SETLOCAL EnableDelayedExpansion
-TITLE DMP41 Server Manager
+:: ENSURE WORK DIR IS CORRECT
+cd /d "%~dp0"
+title DMP41 Server Manager
 
-:: Default port
-SET "PORT=3000"
+:: --- CRASH PROTECTION ---
+:: If you see this, the script made it past the initial load.
+echo [1/4] Initializing DMP41 System...
 
-:: Try to find PORT in .env
-if exist .env (
-    for /f "tokens=1,2 delims==" %%a in (.env) do (
-        if "%%a"=="PORT" SET "PORT=%%b"
-    )
-)
+:: --- CHECK NODE.JS ---
+echo [2/4] Verifying Node.js...
+node -v >nul 2>&1
+if %ERRORLEVEL% NEQ 0 goto NO_NODE
 
-:menu
-cls
-echo ==========================================
-echo       DMP41 Server Control Panel
-echo ==========================================
-echo Configured Port: %PORT%
-echo ------------------------------------------
-echo 1. Start Server (opens in new window)
-echo 2. Stop Server (kills process on port %PORT%)
-echo 3. Restart Server
-echo 4. Install/Update Dependencies
-echo 5. Exit
-echo ==========================================
-set /p choice="Select an option (1-5): "
+:: --- CHECK PYTHON ---
+echo [3/4] Verifying Python...
+python --version >nul 2>&1
+if %ERRORLEVEL% NEQ 0 goto NO_PYTHON
 
-if "%choice%"=="1" goto start
-if "%choice%"=="2" goto stop
-if "%choice%"=="3" goto restart
-if "%choice%"=="4" goto install
-if "%choice%"=="5" goto exit
-
-goto menu
-
-:start
-echo.
+:: --- SYNC DEPENDENCIES ---
+echo [4/4] Syncing Libraries...
 if not exist node_modules (
-    echo [!] node_modules not found. Running npm install first...
+    echo Installing required Node packages...
     call npm install
 )
-echo Starting DMP41 server on port %PORT%...
-start "DMP41_Server_Process" cmd /k "node server.js"
-echo Server launched in a new window.
-timeout /t 2 >nul
-goto menu
 
-:stop
-echo.
-echo Stopping server listening on port %PORT%...
-set "killed="
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
-    echo Killing PID %%a...
-    taskkill /F /PID %%a
-    set "killed=1"
+:: Check python packages
+python -c "import xlrd, xlwt, xlutils" >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo Installing required Python packages...
+    pip install xlutils xlrd==1.2.0 xlwt
 )
-if not defined killed echo No server found running on port %PORT%.
-pause
-goto menu
 
-:restart
+:: --- START SERVER ---
+:START_SERVER
+cls
+echo ==========================================
+echo       DMP41 Calibration System
+echo ==========================================
+echo Local URL: http://localhost:3000
+echo ------------------------------------------
+echo [HINT] To stop the server, press Ctrl+C
 echo.
-echo Stopping server...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
+
+:: Kill existing process on 3000
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 " ^| findstr "LISTENING"') do (
     taskkill /F /PID %%a >nul 2>&1
 )
-echo Waiting for port to free up...
-timeout /t 2 >nul
-echo Starting server...
-start "DMP41_Server_Process" cmd /k "node server.js"
-echo Server restarted.
-pause
-goto menu
 
-:install
+:: RUN SERVER
+node server.js
+
 echo.
-echo Installing dependencies...
-call npm install
-echo Done.
-pause
-goto menu
+echo ------------------------------------------
+echo Server has stopped.
+echo ------------------------------------------
+echo 1. Restart
+echo 2. Exit
+set /p opt="Choice (1 or 2): "
+if "%opt%"=="1" goto START_SERVER
+exit /b
 
-:exit
-exit
+:: --- ERROR HANDLERS ---
+
+:NO_NODE
+echo.
+echo [!] ERROR: Node.js is not found on your system.
+echo Attempting automated installation via winget...
+winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+if %ERRORLEVEL% EQU 0 (
+    echo.
+    echo [SUCCESS] Node.js installed.
+    echo Please CLOSE this window and run manage_server.bat again.
+    pause
+    exit /b
+)
+echo.
+echo [FAILED] Automated installation failed.
+echo Please download Node.js manually from: https://nodejs.org/
+start https://nodejs.org/
+pause
+exit /b
+
+:NO_PYTHON
+echo.
+echo [!] ERROR: Python is not found on your system.
+echo Attempting automated installation via winget...
+winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements
+if %ERRORLEVEL% EQU 0 (
+    echo.
+    echo [SUCCESS] Python installed.
+    echo Please CLOSE this window and run manage_server.bat again.
+    pause
+    exit /b
+)
+echo.
+echo [FAILED] Automated installation failed.
+echo Please download Python manually from: https://www.python.org/
+start https://www.python.org/
+pause
+exit /b

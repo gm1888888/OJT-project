@@ -61,12 +61,12 @@ class CalibrationEngine {
 
     // Expanded uncertainty (k = 2 for ~95% confidence)
     const w_expanded = 2 * w_combined;
-    const relative_uncertainty_percent = (w_expanded / reference_force_kn) * 100;
+    const relative_uncertainty_percent = (Math.abs(reference_force_kn) > 0) ? (w_expanded / reference_force_kn) * 100 : 0;
 
     return {
       combined_uncertainty_kn: parseFloat(w_combined.toFixed(9)),
       expanded_uncertainty_kn: parseFloat(w_expanded.toFixed(9)),
-      relative_uncertainty_percent: parseFloat(relative_uncertainty_percent.toFixed(4)),
+      relative_uncertainty_percent: parseFloat((relative_uncertainty_percent || 0).toFixed(4)),
       components: {
         repeatability: w_rep,
         resolution: w_res,
@@ -77,41 +77,42 @@ class CalibrationEngine {
     };
   }
 
-  // ISO 7500-1 Classification
-  classifyMeasurement(relativeErrorPercent, repeatabilityErrorPercent, zeroErrorPercent = 0) {
-    const maxError = Math.max(
-        Math.abs(relativeErrorPercent), 
-        Math.abs(repeatabilityErrorPercent),
-        Math.abs(zeroErrorPercent)
-    );
-    
-    if (maxError <= 0.5) return 'Class 0.5';
-    if (maxError <= 1.0) return 'Class 1.0';
-    if (maxError <= 2.0) return 'Class 2.0';
-    if (maxError <= 3.0) return 'Class 3.0';
-    return 'Unclassified';
+  // ISO 376 Classification
+  classifyMeasurement(relativeUncertaintyPercent) {
+    const u = parseFloat(relativeUncertaintyPercent);
+    if (u < 0.05) return 'Class 0';
+    if (u < 0.1) return 'Class 1';
+    if (u < 0.2) return 'Class 2';
+    return 'Class 3';
   }
 
   // Full calibration result calculation
   processCalibrationPoint(params) {
     const {
       targetForceKgf,
+      series1_m = 0, series2_m = 0, series3_m = 0,
       series1_mvv, series2_mvv, series3_mvv,
-      zeroBaseline_mvv,
+      zeroBaseline1 = 0, zeroBaseline2 = 0, zeroBaseline3 = 0,
       coeffA, coeffB, coeffC,
       calUncertainty_percent,
       temperatureChange_c
     } = params;
 
-    // Apply zero correction
-    const s1_corrected = series1_mvv - zeroBaseline_mvv;
-    const s2_corrected = series2_mvv - zeroBaseline_mvv;
-    const s3_corrected = series3_mvv - zeroBaseline_mvv;
+    // Apply per-series zero correction
+    const s1_corrected = series1_mvv !== 0 ? series1_mvv - zeroBaseline1 : 0;
+    const s2_corrected = series2_mvv !== 0 ? series2_mvv - zeroBaseline2 : 0;
+    const s3_corrected = series3_mvv !== 0 ? series3_mvv - zeroBaseline3 : 0;
+    
+    const netValues = [s1_corrected, s2_corrected, s3_corrected];
+    const activeNets = netValues.filter((v, i) => [series1_mvv, series2_mvv, series3_mvv][i] !== 0);
+    const meanNetDeflection = activeNets.length > 0 ? activeNets.reduce((a, b) => a + b, 0) / activeNets.length : 0;
 
     // Apply polynomial
     const s1_kn = this.calculateEquivalentForce(s1_corrected, coeffA, coeffB, coeffC);
     const s2_kn = this.calculateEquivalentForce(s2_corrected, coeffA, coeffB, coeffC);
     const s3_kn = this.calculateEquivalentForce(s3_corrected, coeffA, coeffB, coeffC);
+    
+    const runForcesKn = [s1_kn, s2_kn, s3_kn];
 
     // 3-run average
     const avgResult = this.calculateThreeRunAverage(s1_kn, s2_kn, s3_kn);
@@ -129,42 +130,36 @@ class CalibrationEngine {
 
     const uncertainty = this.calculateUncertainty(uncertaintyParams);
 
-    // Classification (ISO 7500-1)
-    const repeatabilityErrorPercent = (avgResult.variance > 0 && Math.abs(avgResult.mean_kn) > 0) ? 
-        ((Math.max(s1_kn, s2_kn, s3_kn) - Math.min(s1_kn, s2_kn, s3_kn)) / Math.abs(avgResult.mean_kn)) * 100 : 0;
-        
+    // Classification
+    const classification = this.classifyMeasurement(uncertainty.relative_uncertainty_percent);
+
     // Error analysis
-    // Indicated = targetForceKn (what the machine says)
-    // True = avgResult.mean_kn (what the standard says)
     const targetForceKn = targetForceKgf * this.gravityConstant;
-    const absoluteError = targetForceKn - avgResult.mean_kn;
-    const relativeErrorPercent = (absoluteError / avgResult.mean_kn) * 100;
-
-    // Zero return error (if available in params)
-    let zeroReturnErrorPercent = 0;
-    if (params.zero_return_mvv) {
-        zeroReturnErrorPercent = (params.zero_return_mvv / params.max_deflection_mvv) * 100;
-    }
-
-    const classification = this.classifyMeasurement(relativeErrorPercent, repeatabilityErrorPercent, zeroReturnErrorPercent);
+    const absoluteError = avgResult.mean_kn - targetForceKn;
+    const relativeErrorPercent = (Math.abs(targetForceKn) > 0) ? (absoluteError / targetForceKn) * 100 : 0;
 
     return {
-      target_force_kgf: targetForceKgf,
-      target_force_kn: targetForceKn,
+      targetForceKgf: targetForceKgf,
+      targetForceKn: targetForceKn,
+      series1_m: series1_m,
+      series2_m: series2_m,
+      series3_m: series3_m,
       series1_mvv: series1_mvv,
       series2_mvv: series2_mvv,
       series3_mvv: series3_mvv,
+      netValues: netValues,
+      meanNetDeflection: meanNetDeflection,
+      runForcesKn: runForcesKn,
       series1_kn: s1_kn,
       series2_kn: s2_kn,
       series3_kn: s3_kn,
-      mean_force_kn: avgResult.mean_kn,
+      meanForceKn: avgResult.mean_kn,
       repeatability_kn: avgResult.repeatability_kn,
       variance: avgResult.variance,
       uncertainty_kn: uncertainty.expanded_uncertainty_kn,
       relative_uncertainty_percent: uncertainty.relative_uncertainty_percent,
       absolute_error_kn: absoluteError,
       relative_error_percent: relativeErrorPercent,
-      zero_return_error_percent: zeroReturnErrorPercent,
       classification: classification,
       timestamp: new Date().toISOString()
     };

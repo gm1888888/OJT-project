@@ -15,7 +15,6 @@
     "express": "^5.2.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
-    "serialport": "^13.0.0",
     "socket.io": "^4.5.4"
   },
   "devDependencies": {

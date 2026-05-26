@@ -25,17 +25,9 @@ const dmp41 = new DMP41Interface(process.env.DMP41_HOST, process.env.DMP41_PORT)
 if (fs.existsSync(SETTINGS_FILE)) {
   try {
     const savedSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-    if (savedSettings.connection) {
-      if (savedSettings.connection.type) {
-        dmp41.connectionType = savedSettings.connection.type;
-      }
-      if (savedSettings.connection.tcp) {
-        dmp41.host = savedSettings.connection.tcp.ip || dmp41.host;
-        dmp41.port = savedSettings.connection.tcp.port || dmp41.port;
-      }
-      if (savedSettings.connection.serial) {
-        dmp41.serialConfig = savedSettings.connection.serial;
-      }
+    if (savedSettings.connection && savedSettings.connection.tcp) {
+      dmp41.host = savedSettings.connection.tcp.ip || dmp41.host;
+      dmp41.port = savedSettings.connection.tcp.port || dmp41.port;
     }
     if (savedSettings.channel) {
       dmp41.currentChannel = parseInt(savedSettings.channel);
@@ -72,6 +64,11 @@ function initDatabase() {
     temperature_after REAL,
     humidity_before REAL,
     humidity_after REAL,
+    coeff_a REAL,
+    coeff_b REAL,
+    coeff_c REAL,
+    ref_unc REAL,
+    resolution REAL,
     zero_return_mvv REAL,
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -88,6 +85,7 @@ function initDatabase() {
     raw_reading_mvv REAL,
     zero_corrected_mvv REAL,
     equivalent_force_kn REAL,
+    machine_indicated_kgf REAL,
     series_number INTEGER DEFAULT 1,
     is_zero_return BOOLEAN DEFAULT 0,
     reading_timestamp DATETIME,
@@ -168,12 +166,28 @@ function initDatabase() {
     next_calibration_date DATE
   )`);
 
-  // Schema migrations for existing databases
+  // Migrate existing tables
   try { db.exec("ALTER TABLE test_points ADD COLUMN is_zero_return BOOLEAN DEFAULT 0"); } catch (e) {}
+  try { db.exec("ALTER TABLE test_points ADD COLUMN machine_indicated_kgf REAL"); } catch (e) {}
   try { db.exec("ALTER TABLE calibration_projects ADD COLUMN make_model TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE calibration_projects ADD COLUMN increment TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE calibration_projects ADD COLUMN resolution TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE calibration_projects ADD COLUMN range_text TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN coeff_a REAL"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN coeff_b REAL"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN coeff_c REAL"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN ref_unc REAL"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN temperature_before REAL"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN temperature_after REAL"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN humidity_before REAL"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN humidity_after REAL"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN output_unit TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN ref_model TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN ref_capacity TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN ref_sn TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN ref_cert TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN ref_date TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN is_archived BOOLEAN DEFAULT 0"); } catch (e) {}
 }
 
 // ============================================
@@ -195,38 +209,23 @@ app.get('/api/hardware/status', async (req, res) => {
   }
 });
 
-app.post('/api/hardware/mode', (req, res) => {
+app.post('/api/hardware/mode', async (req, res) => {
   try {
     const { mode } = req.body;
     const isDemo = mode === 'demo';
-    dmp41.setDemoMode(isDemo);
+    await dmp41.setDemoMode(isDemo);
     res.json({ status: 'success', mode: isDemo ? 'demo' : 'live' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/hardware/ports', async (req, res) => {
-  try {
-    const { SerialPort } = require('serialport');
-    const ports = await SerialPort.list();
-    res.json(ports);
-  } catch (e) {
-    res.json([]);
-  }
-});
-
 app.post('/api/hardware/connect', async (req, res) => {
   try {
     // Dynamically apply settings from the UI payload
-    if (req.body && req.body.type) {
-      dmp41.connectionType = req.body.type;
-      if (req.body.type === 'tcp' && req.body.tcp) {
-        dmp41.host = req.body.tcp.ip || dmp41.host;
-        dmp41.port = req.body.tcp.port || dmp41.port;
-      } else if (req.body.type === 'serial' && req.body.serial) {
-        dmp41.serialConfig = { ...dmp41.serialConfig, ...req.body.serial };
-      }
+    if (req.body && req.body.tcp) {
+      dmp41.host = req.body.tcp.ip || dmp41.host;
+      dmp41.port = req.body.tcp.port || dmp41.port;
     }
     
     await dmp41.connect();
@@ -304,10 +303,18 @@ app.get('/api/hardware/is-stable', (req, res) => {
 app.post('/api/hardware/command', async (req, res) => {
   try {
     const { command } = req.body;
-    if (!command) {
+    if (!command || typeof command !== 'string') {
       return res.status(400).json({ error: 'Command is required' });
     }
-    const response = await dmp41.sendCommand(command);
+    
+    const sanitizedCmd = command.trim().toUpperCase();
+    
+    // Validate DMP41 command structure: 3 letters optionally followed by ? and/or alphanumeric parameters
+    if (!/^[A-Z]{3}(\?[A-Z0-9.\-]*|[A-Z0-9.\-]*)?$/.test(sanitizedCmd)) {
+      return res.status(400).json({ error: 'Invalid command format. DMP41 commands must be 3 letters (e.g., TAR, MSV?, CHS1).' });
+    }
+
+    const response = await dmp41.sendCommand(sanitizedCmd);
     res.json({ response });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -320,14 +327,29 @@ app.post('/api/hardware/command', async (req, res) => {
 
 app.post('/api/calibration/projects', (req, res) => {
   try {
-    const { project_name, instrument_name, serial_number, capacity_kgf, calibration_date, mode, range_text, make_model, increment, resolution } = req.body;
+    const { 
+      project_name, instrument_name, serial_number, capacity_kgf, calibration_date, mode, 
+      range_text, make_model, increment, resolution,
+      coeff_a, coeff_b, coeff_c, ref_unc,
+      temperature_before, temperature_after, humidity_before, humidity_after,
+      output_unit, ref_model, ref_capacity, ref_sn, ref_cert, ref_date
+    } = req.body;
     const stmt = db.prepare(`
       INSERT INTO calibration_projects 
-      (project_name, instrument_name, serial_number, capacity_kgf, calibration_date, mode, range_text, make_model, increment, resolution)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (project_name, instrument_name, serial_number, capacity_kgf, calibration_date, mode, range_text, make_model, increment, resolution,
+       coeff_a, coeff_b, coeff_c, ref_unc,
+       temperature_before, temperature_after, humidity_before, humidity_after,
+       output_unit, ref_model, ref_capacity, ref_sn, ref_cert, ref_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
-    const result = stmt.run(project_name ?? null, instrument_name ?? null, serial_number ?? null, capacity_kgf ?? null, calibration_date ?? null, mode ?? 'Compression', range_text ?? null, make_model ?? null, increment ?? null, resolution ?? null);
+    const result = stmt.run(
+      project_name ?? null, instrument_name ?? null, serial_number ?? null, capacity_kgf ?? null, calibration_date ?? null, mode ?? 'Compression', 
+      range_text ?? null, make_model ?? null, increment ?? null, resolution ?? null,
+      coeff_a ?? null, coeff_b ?? null, coeff_c ?? null, ref_unc ?? null,
+      temperature_before ?? null, temperature_after ?? null, humidity_before ?? null, humidity_after ?? null,
+      output_unit ?? 'kgf', ref_model ?? null, ref_capacity ?? null, ref_sn ?? null, ref_cert ?? null, ref_date ?? null
+    );
     res.json({ project_id: result.lastInsertRowid, status: 'success' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -346,9 +368,28 @@ app.get('/api/calibration/projects', (req, res) => {
 
 app.get('/api/calibration/history', (req, res) => {
   try {
-    const stmt = db.prepare('SELECT * FROM calibration_projects WHERE status = \'Saved\' ORDER BY updated_at DESC');
-    const rows = stmt.all();
+    const isArchived = req.query.archived === 'true' ? 1 : 0;
+    const stmt = db.prepare('SELECT * FROM calibration_projects WHERE status = \'Saved\' AND is_archived = ? ORDER BY updated_at DESC');
+    const rows = stmt.all(isArchived);
     res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/calibration/projects/:id/archive', (req, res) => {
+  try {
+    db.prepare('UPDATE calibration_projects SET is_archived = 1 WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/calibration/projects/:id/unarchive', (req, res) => {
+  try {
+    db.prepare('UPDATE calibration_projects SET is_archived = 0 WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -365,95 +406,111 @@ app.put('/api/calibration/projects/:id/save', (req, res) => {
 
 app.put('/api/calibration/projects/:id', (req, res) => {
   try {
-    const { project_name, instrument_name, serial_number, capacity_kgf, calibration_date, mode, range_text, make_model, increment, resolution } = req.body;
+    const { 
+      project_name, instrument_name, serial_number, capacity_kgf, calibration_date, mode, 
+      range_text, make_model, increment, resolution,
+      coeff_a, coeff_b, coeff_c, ref_unc,
+      temperature_before, temperature_after, humidity_before, humidity_after,
+      output_unit, ref_model, ref_capacity, ref_sn, ref_cert, ref_date
+    } = req.body;
     db.prepare(`
-      UPDATE calibration_projects 
-      SET project_name = ?, instrument_name = ?, serial_number = ?, capacity_kgf = ?, calibration_date = ?, mode = ?, range_text = ?, make_model = ?, increment = ?, resolution = ?, updated_at = CURRENT_TIMESTAMP 
+      UPDATE calibration_projects
+      SET project_name = ?, instrument_name = ?, serial_number = ?, capacity_kgf = ?, calibration_date = ?, mode = ?, range_text = ?, make_model = ?, increment = ?, resolution = ?,
+          coeff_a = ?, coeff_b = ?, coeff_c = ?, ref_unc = ?,
+          temperature_before = ?, temperature_after = ?, humidity_before = ?, humidity_after = ?,
+          output_unit = ?, ref_model = ?, ref_capacity = ?, ref_sn = ?, ref_cert = ?, ref_date = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(project_name ?? null, instrument_name ?? null, serial_number ?? null, capacity_kgf ?? null, calibration_date ?? null, mode ?? 'Compression', range_text ?? null, make_model ?? null, increment ?? null, resolution ?? null, req.params.id);
+    `).run(
+      project_name ?? null, instrument_name ?? null, serial_number ?? null, capacity_kgf ?? null, calibration_date ?? null, mode ?? 'Compression', 
+      range_text ?? null, make_model ?? null, increment ?? null, resolution ?? null,
+      coeff_a ?? null, coeff_b ?? null, coeff_c ?? null, ref_unc ?? null,
+      temperature_before ?? null, temperature_after ?? null, humidity_before ?? null, humidity_after ?? null,
+      output_unit ?? 'kgf', ref_model ?? null, ref_capacity ?? null, ref_sn ?? null, ref_cert ?? null, ref_date ?? null, req.params.id
+    );
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (err) {    res.status(500).json({ error: err.message });
   }
 });
 
 app.delete('/api/calibration/projects/:id', (req, res) => {
-  try {
-    const projectId = req.params.id;
-    // Delete test points first (foreign key constraint might do this, but safe to be explicit)
-    db.prepare(`DELETE FROM test_points WHERE project_id = ?`).run(projectId);
-    // Delete the project
-    db.prepare(`DELETE FROM calibration_projects WHERE id = ?`).run(projectId);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  // Permanently disabled to enforce non-destructive archival workflow
+  res.status(403).json({ error: "Permanent deletion is disabled. Please archive the record instead." });
 });
 
 app.get('/api/calibration/process/:project_id', (req, res) => {
   try {
     const project_id = req.params.project_id;
     
-    // 1. Fetch test points
-    const points = db.prepare('SELECT * FROM test_points WHERE project_id = ?').all(project_id);
+    // 1. Fetch project to get saved coefficients
+    const project = db.prepare('SELECT * FROM calibration_projects WHERE id = ?').get(project_id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    // 2. Fetch test points sorted by sequence
+    const points = db.prepare('SELECT * FROM test_points WHERE project_id = ? ORDER BY measurement_sequence ASC, series_number ASC').all(project_id);
     
-    // 2. Fetch current settings for coefficients and uncertainty
-    let settings = {};
-    if (fs.existsSync(SETTINGS_FILE)) {
-      settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-    }
+    const coeffA = parseFloat(project.coeff_a ?? 1.0) || 1.0;
+    const coeffB = parseFloat(project.coeff_b ?? 0.0) || 0.0;
+    const coeffC = parseFloat(project.coeff_c ?? 0.0) || 0.0;
+    const calUnc = parseFloat(project.ref_unc ?? 0.02) || 0.02;
+    const sensitivity_ppm = 50; // Fallback
+    const resolution_kgf = parseFloat(project.resolution) || 0.01;
 
-    const coeffA = parseFloat(settings.coeff_a || 1.0);
-    const coeffB = parseFloat(settings.coeff_b || 0.0);
-    const coeffC = parseFloat(settings.coeff_c || 0.0);
-    const calUnc = parseFloat(settings.ref_unc || 0.02);
-    const sensitivity_ppm = parseFloat(settings.sensitivity_ppm || 50);
-    const resolution_kgf = parseFloat(settings.resolution_kgf || 0.01);
+    // 3. Separate stages
+    const preloadingPoints = points.filter(p => p.stage_name === 'Pre-loading');
+    const measuredPoints = points.filter(p => p.stage_name === 'Measured');
 
-    // 3. Group points by target and run
-    const pointsByTarget = {};
-    const zeroReturnsByRun = { 1: 0, 2: 0, 3: 0 };
+    // 4. Group Measured points by sequence
+    const pointsBySeq = {};
     let maxDeflectionMvv = 0.0001; 
 
-    points.forEach(pt => {
+    measuredPoints.forEach(pt => {
       if (pt.raw_reading_mvv > maxDeflectionMvv) maxDeflectionMvv = pt.raw_reading_mvv;
 
-      if (pt.is_zero_return || pt.target_value_kgf === 0) {
-        zeroReturnsByRun[pt.series_number] = pt.raw_reading_mvv;
-      } else {
-        if (!pointsByTarget[pt.target_value_kgf]) {
-          pointsByTarget[pt.target_value_kgf] = { s1: 0, s2: 0, s3: 0 };
-        }
-        if (pt.series_number === 1) pointsByTarget[pt.target_value_kgf].s1 = pt.raw_reading_mvv;
-        if (pt.series_number === 2) pointsByTarget[pt.target_value_kgf].s2 = pt.raw_reading_mvv;
-        if (pt.series_number === 3) pointsByTarget[pt.target_value_kgf].s3 = pt.raw_reading_mvv;
+      const seq = pt.measurement_sequence;
+      if (!pointsBySeq[seq]) {
+          pointsBySeq[seq] = { target: pt.target_value_kgf, s1: 0, s2: 0, s3: 0, m1: pt.target_value_kgf, m2: pt.target_value_kgf, m3: pt.target_value_kgf };
       }
+      if (pt.series_number === 1) { pointsBySeq[seq].s1 = pt.raw_reading_mvv; pointsBySeq[seq].m1 = pt.machine_indicated_kgf ?? pt.target_value_kgf; }
+      if (pt.series_number === 2) { pointsBySeq[seq].s2 = pt.raw_reading_mvv; pointsBySeq[seq].m2 = pt.machine_indicated_kgf ?? pt.target_value_kgf; }
+      if (pt.series_number === 3) { pointsBySeq[seq].s3 = pt.raw_reading_mvv; pointsBySeq[seq].m3 = pt.machine_indicated_kgf ?? pt.target_value_kgf; }
     });
 
-    // 4. Process each group
-    const targets = Object.keys(pointsByTarget).map(Number).sort((a, b) => a - b).filter(t => t > 0);
-    const results = targets.map(target => {
-      const data = pointsByTarget[target];
-      // Use the zero return from the last run (Run 3) or average them for the error calculation
-      const avgZeroReturn = (zeroReturnsByRun[1] + zeroReturnsByRun[2] + zeroReturnsByRun[3]) / 3;
-      
+    // Zeros from Pre-loading (index 0 is baseline)
+    const baselinePoints = preloadingPoints.filter(p => p.measurement_sequence === 0);
+    const z1 = baselinePoints.find(p => p.series_number === 1)?.raw_reading_mvv || 0;
+    const z2 = baselinePoints.find(p => p.series_number === 2)?.raw_reading_mvv || 0;
+    const z3 = baselinePoints.find(p => p.series_number === 3)?.raw_reading_mvv || 0;
+
+    // 5. Process Measured Groups
+    const sortedSeqs = Object.keys(pointsBySeq).map(Number).sort((a, b) => a - b);
+    
+    const results = sortedSeqs.map(seq => {
+      const data = pointsBySeq[seq];
       return calibEngine.processCalibrationPoint({
-        targetForceKgf: target,
+        targetForceKgf: data.target,
+        series1_m: data.m1,
+        series2_m: data.m2,
+        series3_m: data.m3,
         series1_mvv: data.s1,
         series2_mvv: data.s2,
         series3_mvv: data.s3,
-        zero_return_mvv: avgZeroReturn, 
+        zeroBaseline1: z1,
+        zeroBaseline2: z2,
+        zeroBaseline3: z3,
         max_deflection_mvv: maxDeflectionMvv,
-        zeroBaseline_mvv: 0, 
         coeffA, coeffB, coeffC,
         calUncertainty_percent: calUnc,
         sensitivity_ppm: sensitivity_ppm,
         resolution_kgf: resolution_kgf,
-        temperatureChange_c: 0 
+        temperatureChange_c: (project.temperature_after || 0) - (project.temperature_before || 0)
       });
     });
 
-    res.json(results);
+    res.json({
+        metadata: project,
+        preloading: preloadingPoints,
+        results: results
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -512,31 +569,22 @@ app.get('/api/settings/load', (req, res) => {
 app.post('/api/settings/save', (req, res) => {
   try {
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(req.body, null, 2), 'utf8');
-    
-    // Apply new connection settings directly to the hardware interface
-    if (req.body.connection) {
-      if (req.body.connection.type) {
-        dmp41.connectionType = req.body.connection.type;
-      }
-      if (req.body.connection.tcp) {
-        dmp41.host = req.body.connection.tcp.ip || dmp41.host;
-        dmp41.port = req.body.connection.tcp.port || dmp41.port;
-      }
-      if (req.body.connection.serial) {
-        dmp41.serialConfig = req.body.connection.serial;
-      }
+
+    // Apply new TCP connection settings directly to the hardware interface
+    if (req.body.connection && req.body.connection.tcp) {
+      dmp41.host = req.body.connection.tcp.ip || dmp41.host;
+      dmp41.port = req.body.connection.tcp.port || dmp41.port;
     }
-    
+
     if (req.body.channel) {
       dmp41.currentChannel = parseInt(req.body.channel);
     }
-    
+
     res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 // ============================================
 // CERTIFICATE ROUTES
 // ============================================
@@ -618,18 +666,18 @@ app.post('/api/calibration/test-points/batch', (req, res) => {
     
     const stmt = db.prepare(`
       INSERT INTO test_points 
-      (project_id, target_value_kgf, raw_reading_mvv, series_number, is_zero_return, reading_timestamp)
-      VALUES (?, ?, ?, ?, ?, ?)
+      (project_id, stage_name, target_value_kgf, raw_reading_mvv, machine_indicated_kgf, series_number, measurement_sequence, reading_timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     db.exec('BEGIN TRANSACTION');
     points.forEach(p => {
       // Run 1
-      stmt.run(project_id, p.target, p.s1, 1, 0, new Date().toISOString());
+      stmt.run(project_id, p.stage || 'Measured', p.target, p.s1, p.m1 || p.target, 1, p.idx || 0, new Date().toISOString());
       // Run 2
-      stmt.run(project_id, p.target, p.s2, 2, 0, new Date().toISOString());
+      stmt.run(project_id, p.stage || 'Measured', p.target, p.s2, p.m2 || p.target, 2, p.idx || 0, new Date().toISOString());
       // Run 3
-      stmt.run(project_id, p.target, p.s3, 3, 0, new Date().toISOString());
+      stmt.run(project_id, p.stage || 'Measured', p.target, p.s3, p.m3 || p.target, 3, p.idx || 0, new Date().toISOString());
     });
     db.exec('COMMIT');
 

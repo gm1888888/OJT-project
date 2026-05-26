@@ -1,6 +1,7 @@
 class DMP41CalibrationApp {
   constructor() {
     this.currentProject = null;
+    this.currentHistoricalData = null; // Store data for history view
     this.currentReadings = [];
     this.isPolling = false;
     this.calibrationSequence = [];
@@ -35,7 +36,6 @@ class DMP41CalibrationApp {
     
     this.initEventListeners();
     this.initChart();
-    this.fetchAvailablePorts();
     this.checkHardwareStatus(); // Initial check
     this.loadSettings();
     
@@ -64,6 +64,12 @@ class DMP41CalibrationApp {
       if (el) el.value = '';
     });
 
+    // Clear Table 4 Inputs
+    ['t4-model', 't4-cap', 't4-sn', 't4-cert', 't4-date', 't4-a', 't4-b', 't4-c', 't4-u'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+
     // Clear Logger Data internally
     this.loggerData.preloading.forEach(r => r.runs.forEach(run => { run.m = 0; run.r = 0; }));
     this.loggerData.measured.forEach(r => {
@@ -77,24 +83,6 @@ class DMP41CalibrationApp {
     // Force the "New Project" modal to show on startup
     const modalNewProject = document.getElementById('modal-new-project');
     if (modalNewProject) modalNewProject.style.display = 'block';
-  }
-
-  async fetchAvailablePorts() {
-    try {
-      const res = await fetch('/api/hardware/ports');
-      const ports = await res.json();
-      const comSelect = document.getElementById('main-com');
-      const advancedComSelect = document.getElementById('set-com');
-      
-      const optionsHtml = ports.length === 0 
-        ? '<option value="">No COM Ports Found</option>'
-        : ports.map(p => `<option value="${p.path}">${p.path} ${p.manufacturer ? '('+p.manufacturer+')' : ''}</option>`).join('');
-        
-      if (comSelect) comSelect.innerHTML = optionsHtml;
-      if (advancedComSelect) advancedComSelect.innerHTML = optionsHtml;
-    } catch(e) {
-       console.warn('Failed to fetch COM ports', e);
-    }
   }
 
   stdev(arr) {
@@ -165,38 +153,11 @@ class DMP41CalibrationApp {
       if (!settings || Object.keys(settings).length === 0) return;
 
       if (settings.connection) {
-        // Advanced Settings Modal
-        if (settings.connection.type) {
-          const typeSelect = document.getElementById('set-conn-type');
-          if (typeSelect) {
-            typeSelect.value = settings.connection.type;
-            typeSelect.dispatchEvent(new Event('change'));
-          }
-          const mainTypeSelect = document.getElementById('main-conn-type');
-          if (mainTypeSelect) {
-            mainTypeSelect.value = settings.connection.type;
-            mainTypeSelect.dispatchEvent(new Event('change'));
-          }
-        }
         if (settings.connection.tcp) {
           if (document.getElementById('set-ip')) document.getElementById('set-ip').value = settings.connection.tcp.ip || '';
           if (document.getElementById('set-port')) document.getElementById('set-port').value = settings.connection.tcp.port || '';
           if (document.getElementById('main-ip')) document.getElementById('main-ip').value = settings.connection.tcp.ip || '192.168.1.100';
           if (document.getElementById('main-port')) document.getElementById('main-port').value = settings.connection.tcp.port || '1234';
-        }
-        if (settings.connection.serial) {
-          if (document.getElementById('set-com')) document.getElementById('set-com').value = settings.connection.serial.com || '';
-          if (document.getElementById('set-baud')) document.getElementById('set-baud').value = settings.connection.serial.baud || '';
-          if (document.getElementById('set-parity')) document.getElementById('set-parity').value = settings.connection.serial.parity || '';
-          if (document.getElementById('set-data-bits')) document.getElementById('set-data-bits').value = settings.connection.serial.data_bits || '';
-          if (document.getElementById('set-stop-bits')) document.getElementById('set-stop-bits').value = settings.connection.serial.stop_bits || '';
-          
-          if (document.getElementById('main-com') && settings.connection.serial.com) {
-            document.getElementById('main-com').value = settings.connection.serial.com;
-          }
-          if (document.getElementById('main-baud')) {
-            document.getElementById('main-baud').value = settings.connection.serial.baud || '4800';
-          }
         }
       }
 
@@ -208,29 +169,6 @@ class DMP41CalibrationApp {
         if (document.getElementById('set-channel')) document.getElementById('set-channel').value = settings.channel;
         if (document.getElementById('disp-channel')) document.getElementById('disp-channel').textContent = settings.channel;
       }
-      if (settings.reading_rate) {
-        if (document.getElementById('set-reading-rate')) document.getElementById('set-reading-rate').value = settings.reading_rate;
-        if (document.getElementById('disp-reading-rate')) document.getElementById('disp-reading-rate').textContent = settings.reading_rate;
-      }
-      if (settings.method) {
-        if (document.getElementById('set-method')) document.getElementById('set-method').value = settings.method;
-        if (document.getElementById('disp-method')) {
-          const select = document.getElementById('set-method');
-          document.getElementById('disp-method').textContent = select.options[select.selectedIndex].text;
-        }
-      }
-      if (settings.meas_time) {
-        if (document.getElementById('set-meas-time')) document.getElementById('set-meas-time').value = settings.meas_time;
-        if (document.getElementById('disp-meas-time')) document.getElementById('disp-meas-time').textContent = settings.meas_time;
-      }
-      if (settings.save_style) {
-        if (document.getElementById('set-save-style')) document.getElementById('set-save-style').value = settings.save_style;
-        if (document.getElementById('disp-save-style')) document.getElementById('disp-save-style').textContent = settings.save_style;
-      }
-      if (settings.avg) {
-        if (document.getElementById('set-avg')) document.getElementById('set-avg').value = settings.avg;
-        if (document.getElementById('disp-avg')) document.getElementById('disp-avg').textContent = settings.avg;
-      }
 
       // Coefficients
       if (settings.coeff_a) document.getElementById('set-coeff-a').value = settings.coeff_a;
@@ -241,16 +179,8 @@ class DMP41CalibrationApp {
       if (settings.resolution_kgf) document.getElementById('set-resolution').value = settings.resolution_kgf;
       if (settings.stability_threshold) document.getElementById('set-stability').value = settings.stability_threshold;
 
-      if (settings.loading_points && document.getElementById('set-loading-points')) document.getElementById('set-loading-points').value = settings.loading_points;
-
-      if (settings.sequences && Array.isArray(settings.sequences)) {
-        settings.sequences.forEach(seq => {
-          if (document.getElementById(`seq-enable-${seq.id}`)) document.getElementById(`seq-enable-${seq.id}`).checked = seq.enable;
-          if (document.getElementById(`seq-preload-${seq.id}`)) document.getElementById(`seq-preload-${seq.id}`).value = seq.preload_num || 0;
-          if (document.getElementById(`seq-load-${seq.id}`)) document.getElementById(`seq-load-${seq.id}`).value = seq.load_num || 0;
-          if (document.getElementById(`seq-mode-${seq.id}`)) document.getElementById(`seq-mode-${seq.id}`).value = seq.mode || 'Inc';
-        });
-      }
+      // Ensure the system updates with new settings
+      this.renderLogger();
     } catch (err) {
       console.error('Failed to load settings:', err);
     }
@@ -288,6 +218,23 @@ class DMP41CalibrationApp {
     document.getElementById('btn-start-polling').addEventListener('click', () => this.startPolling());
     document.getElementById('btn-stop-polling').addEventListener('click', () => this.stopPolling());
 
+    document.getElementById('btn-add-t2-row').addEventListener('click', () => this.addTestPoint('preloading'));
+    document.getElementById('btn-add-t3-row').addEventListener('click', () => this.addTestPoint('measured'));
+
+    // Live Monitor Nav fix
+    const btnMonitor = document.querySelector('a[href="#live-monitor"]');
+    if (btnMonitor) {
+      btnMonitor.addEventListener('click', (e) => {
+        // e.preventDefault();
+        const el = document.getElementById('live-monitor');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+        // Optionally start polling if not active
+        if (this.connectionState === 'connected' && !this.isPolling) {
+            this.startPolling();
+        }
+      });
+    }
+
     // History Nav
     const btnHistory = document.getElementById('nav-history-link-btn');
     if (btnHistory) {
@@ -297,9 +244,41 @@ class DMP41CalibrationApp {
       });
     }
 
+    // Archive Nav
+    const btnArchive = document.getElementById('nav-archive-link-btn');
+    if (btnArchive) {
+      btnArchive.addEventListener('click', () => {
+        document.getElementById('modal-archive-list').style.display = 'block';
+        this.loadHistory('', true); // true for archived
+      });
+    }
+
     const btnSaveHistory = document.getElementById('btn-save-history');
     if (btnSaveHistory) {
       btnSaveHistory.addEventListener('click', () => this.saveToHistory(true));
+    }
+
+    // History & Archive Search & Navigation
+    const histSearch = document.getElementById('history-search');
+    if (histSearch) {
+      histSearch.addEventListener('input', () => this.loadHistory(histSearch.value, false));
+    }
+    const archSearch = document.getElementById('archive-search');
+    if (archSearch) {
+      archSearch.addEventListener('input', () => this.loadHistory(archSearch.value, true));
+    }
+    const btnHistBack = document.getElementById('btn-hist-back');
+    if (btnHistBack) {
+      btnHistBack.addEventListener('click', () => {
+        document.getElementById('modal-history-view').style.display = 'none';
+        if (this.currentHistoricalData && this.currentHistoricalData.is_archived) {
+            document.getElementById('modal-archive-list').style.display = 'block';
+            this.loadHistory('', true);
+        } else {
+            document.getElementById('modal-history-list').style.display = 'block';
+            this.loadHistory();
+        }
+      });
     }
 
     // Logger Actions
@@ -314,33 +293,6 @@ class DMP41CalibrationApp {
     document.querySelectorAll('.unit-btn').forEach(btn => {
       btn.onclick = () => this.setSystemUnit(btn.dataset.unit);
     });
-
-    // Settings Actions
-    const connTypeSelect = document.getElementById('set-conn-type');
-    if (connTypeSelect) {
-      connTypeSelect.addEventListener('change', (e) => {
-        if (e.target.value === 'usb') {
-          document.getElementById('tcp-settings').style.display = 'none';
-          document.getElementById('serial-settings').style.display = 'flex';
-        } else {
-          document.getElementById('tcp-settings').style.display = 'flex';
-          document.getElementById('serial-settings').style.display = 'none';
-        }
-      });
-    }
-
-    const mainConnTypeSelect = document.getElementById('main-conn-type');
-    if (mainConnTypeSelect) {
-      mainConnTypeSelect.addEventListener('change', (e) => {
-        if (e.target.value === 'usb') {
-          document.getElementById('main-tcp-settings').style.display = 'none';
-          document.getElementById('main-serial-settings').style.display = 'flex';
-        } else {
-          document.getElementById('main-tcp-settings').style.display = 'flex';
-          document.getElementById('main-serial-settings').style.display = 'none';
-        }
-      });
-    }
 
     document.getElementById('btn-config')?.addEventListener('click', () => document.getElementById('modal-settings').style.display = 'block');
     document.getElementById('nav-settings')?.addEventListener('click', (e) => {
@@ -357,9 +309,13 @@ class DMP41CalibrationApp {
     }
 
     // Dynamic UI unlocking based on Table 1 manual entry
-    const table1Inputs = ['t1-ref-no', 't1-capacity', 't1-item', 't1-date', 't1-sn'];
+    const table1Inputs = ['t1-ref-no', 't1-capacity', 't1-item', 't1-date', 't1-sn', 't1-mode', 't1-range', 't1-make', 't1-increment', 't1-resolution'];
     table1Inputs.forEach(id => {
-      document.getElementById(id)?.addEventListener('input', () => this.enforceUIState());
+      document.getElementById(id)?.addEventListener('input', () => {
+        this.enforceUIState();
+        // If we want the system to "update", maybe render logger too if anything depends on it
+        this.renderLogger(); 
+      });
     });
 
     const btnDefaultSettings = document.getElementById('btn-default-settings');
@@ -368,10 +324,9 @@ class DMP41CalibrationApp {
     }
 
     // Real-time recalculation listeners
-    ['set-coeff-a', 'set-coeff-b', 'set-coeff-c', 'set-ref-unc', 't5-temp-b', 't5-temp-a', 't5-hum-b', 't5-hum-a'].forEach(id => {
+    ['t4-a', 't4-b', 't4-c', 't4-u', 'set-coeff-a', 'set-coeff-b', 'set-coeff-c', 'set-ref-unc', 't5-temp-b', 't5-temp-a', 't5-hum-b', 't5-hum-a'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('input', () => {
-          this.loggerData.measured.forEach((_, i) => this.calculateLoggerRow(i));
           this.renderLogger();
       });
     });
@@ -441,29 +396,12 @@ class DMP41CalibrationApp {
     }
 
     // Connection
-    const typeSelect = document.getElementById('set-conn-type');
-    if (typeSelect) {
-      typeSelect.value = 'tcp';
-      typeSelect.dispatchEvent(new Event('change'));
-    }
     if (document.getElementById('set-ip')) document.getElementById('set-ip').value = '192.168.1.100';
     if (document.getElementById('set-port')) document.getElementById('set-port').value = '1234';
-    if (document.getElementById('set-com')) document.getElementById('set-com').value = 'COM1';
-    if (document.getElementById('set-baud')) document.getElementById('set-baud').value = '4800';
-    if (document.getElementById('set-parity')) document.getElementById('set-parity').value = 'None';
-    if (document.getElementById('set-data-bits')) document.getElementById('set-data-bits').value = '8';
-    if (document.getElementById('set-stop-bits')) document.getElementById('set-stop-bits').value = '1';
 
     // Instrument
     if (document.getElementById('set-instrument')) document.getElementById('set-instrument').value = 'DMP41';
     if (document.getElementById('set-channel')) document.getElementById('set-channel').value = '1';
-    if (document.getElementById('set-reading-rate')) document.getElementById('set-reading-rate').value = '1 reading/sec';
-
-    // Data Method
-    if (document.getElementById('set-method')) document.getElementById('set-method').value = 'E';
-    if (document.getElementById('set-meas-time')) document.getElementById('set-meas-time').value = '1';
-    if (document.getElementById('set-save-style')) document.getElementById('set-save-style').value = 'KC';
-    if (document.getElementById('set-avg')) document.getElementById('set-avg').value = 'Yes';
 
     // Coefficients
     if (document.getElementById('set-coeff-a')) document.getElementById('set-coeff-a').value = '1.0';
@@ -474,61 +412,27 @@ class DMP41CalibrationApp {
     if (document.getElementById('set-resolution')) document.getElementById('set-resolution').value = '0.01';
     if (document.getElementById('set-stability')) document.getElementById('set-stability').value = '0.000010';
 
-    // Sequence
-    if (document.getElementById('set-loading-points')) document.getElementById('set-loading-points').value = '10';
-    for (let i = 1; i <= 15; i++) {
-      if (document.getElementById(`seq-enable-${i}`)) document.getElementById(`seq-enable-${i}`).checked = false;
-      if (document.getElementById(`seq-preload-${i}`)) document.getElementById(`seq-preload-${i}`).value = '0';
-      if (document.getElementById(`seq-load-${i}`)) document.getElementById(`seq-load-${i}`).value = '0';
-      if (document.getElementById(`seq-mode-${i}`)) document.getElementById(`seq-mode-${i}`).value = 'Inc';
-    }
-
     alert("Defaults restored in the form. Please click 'Save All Settings' to apply them to the system.");
   }
 
   async saveSettings() {
     const settings = {
       connection: {
-        type: document.getElementById('set-conn-type')?.value,
         tcp: {
           ip: document.getElementById('set-ip')?.value,
           port: document.getElementById('set-port')?.value
-        },
-        serial: {
-          com: document.getElementById('set-com')?.value,
-          baud: document.getElementById('set-baud')?.value,
-          parity: document.getElementById('set-parity')?.value,
-          data_bits: document.getElementById('set-data-bits')?.value,
-          stop_bits: document.getElementById('set-stop-bits')?.value
         }
       },
       instrument: document.getElementById('set-instrument')?.value,
       channel: document.getElementById('set-channel')?.value,
-      reading_rate: document.getElementById('set-reading-rate')?.value,
-      method: document.getElementById('set-method')?.value,
-      meas_time: document.getElementById('set-meas-time')?.value,
-      save_style: document.getElementById('set-save-style')?.value,
-      avg: document.getElementById('set-avg')?.value,
       coeff_a: document.getElementById('set-coeff-a')?.value,
       coeff_b: document.getElementById('set-coeff-b')?.value,
       coeff_c: document.getElementById('set-coeff-c')?.value,
       ref_unc: document.getElementById('set-ref-unc')?.value,
       sensitivity_ppm: document.getElementById('set-sensitivity')?.value,
       resolution_kgf: document.getElementById('set-resolution')?.value,
-      stability_threshold: document.getElementById('set-stability')?.value,
-      loading_points: document.getElementById('set-loading-points')?.value,
-      sequences: []
+      stability_threshold: document.getElementById('set-stability')?.value
     };
-
-    for (let i = 1; i <= 15; i++) {
-      settings.sequences.push({
-        id: i,
-        enable: document.getElementById(`seq-enable-${i}`)?.checked,
-        preload_num: document.getElementById(`seq-preload-${i}`)?.value,
-        load_num: document.getElementById(`seq-load-${i}`)?.value,
-        mode: document.getElementById(`seq-mode-${i}`)?.value
-      });
-    }
 
     try {
       const response = await fetch('/api/settings/save', {
@@ -728,6 +632,22 @@ class DMP41CalibrationApp {
     const sn = document.getElementById('t1-sn')?.value;
     const resolution = document.getElementById('t1-resolution')?.value;
 
+    const coeffA = document.getElementById('t4-a')?.value || document.getElementById('set-coeff-a')?.value;
+    const coeffB = document.getElementById('t4-b')?.value || document.getElementById('set-coeff-b')?.value;
+    const coeffC = document.getElementById('t4-c')?.value || document.getElementById('set-coeff-c')?.value;
+    const refUnc = document.getElementById('t4-u')?.value || document.getElementById('set-ref-unc')?.value;
+
+    const refModel = document.getElementById('t4-model')?.value;
+    const refCap = document.getElementById('t4-cap')?.value;
+    const refSn = document.getElementById('t4-sn')?.value;
+    const refCert = document.getElementById('t4-cert')?.value;
+    const refDate = document.getElementById('t4-date')?.value;
+
+    const tempB = document.getElementById('t5-temp-b')?.value;
+    const tempA = document.getElementById('t5-temp-a')?.value;
+    const humB = document.getElementById('t5-hum-b')?.value;
+    const humA = document.getElementById('t5-hum-a')?.value;
+
     if (!refNo || !capacity) return false;
 
     const payload = {
@@ -740,7 +660,21 @@ class DMP41CalibrationApp {
         make_model: make,
         increment: increment,
         serial_number: sn,
-        resolution: resolution
+        resolution: resolution,
+        coeff_a: parseFloat(coeffA) || 1.0,
+        coeff_b: parseFloat(coeffB) || 0.0,
+        coeff_c: parseFloat(coeffC) || 0.0,
+        ref_unc: parseFloat(refUnc) || 0.02,
+        ref_model: refModel,
+        ref_capacity: refCap,
+        ref_sn: refSn,
+        ref_cert: refCert,
+        ref_date: refDate,
+        temperature_before: parseFloat(tempB) || 0,
+        temperature_after: parseFloat(tempA) || 0,
+        humidity_before: parseFloat(humB) || 0,
+        humidity_after: parseFloat(humA) || 0,
+        output_unit: this.currentUnit
     };
 
     try {
@@ -775,25 +709,12 @@ class DMP41CalibrationApp {
     document.getElementById('conn-status').textContent = 'Connecting...';
     document.getElementById('conn-status').style.color = 'black';
     
-    const uiConnType = document.getElementById('main-conn-type')?.value || 'lan';
-    // Map UI 'lan' to backend 'tcp', and UI 'usb' to backend 'serial'
-    const payloadType = uiConnType === 'lan' ? 'tcp' : 'serial';
-    const payload = { type: payloadType };
-    
-    if (payloadType === 'tcp') {
-      payload.tcp = {
+    const payload = { 
+      tcp: {
         ip: document.getElementById('main-ip')?.value || '192.168.1.100',
         port: document.getElementById('main-port')?.value || '1234'
-      };
-    } else {
-      payload.serial = {
-        com: document.getElementById('main-com')?.value || 'COM1',
-        baud: document.getElementById('main-baud')?.value || '4800',
-        parity: 'none',
-        data_bits: 8,
-        stop_bits: 1
-      };
-    }
+      }
+    };
 
     try {
       const res = await fetch('/api/hardware/connect', { 
@@ -945,7 +866,10 @@ class DMP41CalibrationApp {
   }
 
   async saveToHistory(manualClick = false) {
-    await this.syncProjectData(); // Sync manual edits
+    if (manualClick && !confirm("Are you sure you want to save the current data to history?")) return;
+    await this.syncProjectData(); // Sync manual edits & settings snapshot
+    await this.syncPointsData(); // Save all points (Measured & Preloading)
+
     if (!this.currentProject) return;
     try {
       const res = await fetch(`/api/calibration/projects/${this.currentProject.id}/save`, { method: 'PUT' });
@@ -959,15 +883,75 @@ class DMP41CalibrationApp {
     }
   }
 
-  async loadHistory() {
+  async syncPointsData() {
+    if (!this.currentProject) return;
+
+    const points = [];
+
+    // Add Preloading points
+    this.loggerData.preloading.forEach((row, idx) => {
+        points.push({
+            stage: 'Pre-loading',
+            target: row.target || 0,
+            m1: row.runs[0].m,
+            m2: row.runs[1].m,
+            m3: row.runs[2].m,
+            s1: row.runs[0].r,
+            s2: row.runs[1].r,
+            s3: row.runs[2].r,
+            idx: idx
+        });
+    });
+
+    // Add Measured points
+    this.loggerData.measured.forEach((row, idx) => {
+        points.push({
+            stage: 'Measured',
+            target: row.target,
+            m1: row.runs[0].m,
+            m2: row.runs[1].m,
+            m3: row.runs[2].m,
+            s1: row.runs[0].r,
+            s2: row.runs[1].r,
+            s3: row.runs[2].r,
+            idx: idx
+        });
+    });
+
     try {
-      const response = await fetch('/api/calibration/history');
-      const projects = await response.json();
-      const grid = document.getElementById('history-grid');
+        await fetch('/api/calibration/test-points/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project_id: this.currentProject.id, points })
+        });
+    } catch (e) {
+        console.error("Failed to sync points:", e);
+    }
+  }
+
+  async loadHistory(filterText = '', archived = false) {
+    try {
+      const response = await fetch(`/api/calibration/history?archived=${archived}`);
+      let projects = await response.json();
+      const gridId = archived ? 'archive-grid' : 'history-grid';
+      const grid = document.getElementById(gridId);
       if (!grid) return;
 
+      if (filterText) {
+        const lowerFilter = filterText.toLowerCase();
+        projects = projects.filter(p => 
+          (p.project_name || '').toLowerCase().includes(lowerFilter) ||
+          (p.serial_number || '').toLowerCase().includes(lowerFilter) ||
+          new Date(p.updated_at).toLocaleString().toLowerCase().includes(lowerFilter)
+        );
+      }
+
       if (projects.length === 0) {
-        grid.innerHTML = '<p>No history found. Complete a calibration and click "Save to History".</p>';
+        if (archived) {
+          grid.innerHTML = filterText ? '<p>No matching archived records found.</p>' : '<p>No archived data found.</p>';
+        } else {
+          grid.innerHTML = filterText ? '<p>No matching records found.</p>' : '<p>No history found. Complete a calibration and click "Save to History".</p>';
+        }
         return;
       }
 
@@ -987,59 +971,117 @@ class DMP41CalibrationApp {
 
   async viewHistoryProject(projectId) {
     try {
-      // Find the project data
-      const response = await fetch('/api/calibration/history');
-      const projects = await response.json();
-      const project = projects.find(p => p.id === projectId);
-      if (!project) return;
+      // 1. Fetch Processed Historical Data
+      const res = await fetch(`/api/calibration/process/${projectId}`);
+      const data = await res.json();
+      const project = data.metadata;
+      const results = data.results;
 
-      // Populate summary
-      const displayDiv = document.getElementById('history-project-display');
-      displayDiv.innerHTML = `
-        <strong>Project:</strong> ${project.project_name}<br>
-        <strong>Instrument:</strong> ${project.instrument_name || 'N/A'} <br>
-        <strong>S/N:</strong> ${project.serial_number || 'N/A'} | 
-        <strong>Capacity:</strong> ${project.capacity_kgf || 'N/A'} kgf
-      `;
+      // 2. Fill Table 1 (Historical Metadata)
+      document.getElementById('hist-t1-date').textContent = project.calibration_date ? new Date(project.calibration_date).toLocaleDateString() : 'N/A';
+      document.getElementById('hist-t1-mode').textContent = project.mode || 'N/A';
+      document.getElementById('hist-t1-ref-no').textContent = project.project_name || 'N/A';
+      document.getElementById('hist-t1-capacity').textContent = (project.capacity_kgf || '0') + ' kgf';
+      document.getElementById('hist-t1-item').textContent = project.instrument_name || 'N/A';
+      document.getElementById('hist-t1-range').textContent = project.range_text || 'N/A';
+      document.getElementById('hist-t1-make').textContent = project.make_model || 'N/A';
+      document.getElementById('hist-t1-increment').textContent = project.increment || 'N/A';
+      document.getElementById('hist-t1-sn').textContent = project.serial_number || 'N/A';
+      document.getElementById('hist-t1-resolution').textContent = project.resolution || '0.01';
 
-      // Load results
-      const resProcess = await fetch(`/api/calibration/process/${project.id}`);
-      const results = await resProcess.json();
+      // 3. Fill Environmental (Historical Snapshot)
+      document.getElementById('hist-t5-temp-b').textContent = project.temperature_before || '-';
+      document.getElementById('hist-t5-temp-a').textContent = project.temperature_after || '-';
+      document.getElementById('hist-t5-hum-b').textContent = project.humidity_before || '-';
+      document.getElementById('hist-t5-hum-a').textContent = project.humidity_after || '-';
 
-      const tbody = document.getElementById('history-table-body');
-      if (results.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7">No data available for this project.</td></tr>';
-      } else {
-        tbody.innerHTML = results.map((result, idx) => `
-          <tr>
-            <td>${idx}</td>
-            <td>${result.target_force_kgf}</td>
-            <td>${(result.series1_mvv).toFixed(6)}</td>
-            <td>${(result.series2_mvv).toFixed(6)}</td>
-            <td>${(result.series3_mvv).toFixed(6)}</td>
-            <td>${result.mean_force_kn.toFixed(6)}</td>
-            <td>${result.classification}</td>
-          </tr>
-        `).join('');
-      }
+      // 4. Fill Transducer Coefficients (Historical Snapshot)
+      document.getElementById('hist-t4-model').textContent = project.ref_model || 'Saved Standard';
+      document.getElementById('hist-t4-cap').textContent = project.ref_capacity || 'N/A';
+      document.getElementById('hist-t4-sn').textContent = project.ref_sn || 'N/A';
+      document.getElementById('hist-t4-cert').textContent = project.ref_cert || 'N/A';
+      document.getElementById('hist-t4-date').textContent = project.ref_date || 'N/A';
+      document.getElementById('hist-t4-u').textContent = project.ref_unc ?? '0.02';
+      document.getElementById('hist-t4-a').textContent = project.coeff_a ?? '1.0';
+      document.getElementById('hist-t4-b').textContent = project.coeff_b ?? '0.0';
+      document.getElementById('hist-t4-c').textContent = project.coeff_c ?? '0.0';
 
-      // Attach actions for THIS historical project specifically
+      // 5. Map Historical Points to loggerData structure
+      const preGrouped = {};
+      data.preloading.forEach(p => {
+        const seq = p.measurement_sequence;
+        if (!preGrouped[seq]) preGrouped[seq] = { target: p.target_value_kgf || 0, runs: [{m:0,r:0},{m:0,r:0},{m:0,r:0}] };
+        preGrouped[seq].runs[p.series_number - 1] = { m: p.machine_indicated_kgf ?? 0, r: p.raw_reading_mvv || 0 };
+      });
+
+      this.currentHistoricalData = {
+        preloading: Object.keys(preGrouped).sort((a,b) => a-b).map(k => preGrouped[k]),
+        measured: results.map((r, idx) => {
+            const unit = project.output_unit || 'kgf';
+            const scale = this.unitConstants[unit] || 0.00980665;
+            
+            // Calculate raw averages for Table 3
+            const runs = [
+                { m: r.series1_m ?? r.targetForceKgf, r: r.series1_mvv || 0 },
+                { m: r.series2_m ?? r.targetForceKgf, r: r.series2_mvv || 0 },
+                { m: r.series3_m ?? r.targetForceKgf, r: r.series3_mvv || 0 }
+            ];
+            const activeMs = runs.map(run => run.m).filter(m => m !== 0);
+            const activeRs = runs.map(run => run.r).filter(r => r !== 0);
+            const meanIndicatedForce = activeMs.length > 0 ? activeMs.reduce((acc, v) => acc + v, 0) / activeMs.length : 0;
+            const meanRawDeflection = activeRs.length > 0 ? activeRs.reduce((acc, v) => acc + v, 0) / activeRs.length : 0;
+
+            return {
+                point: idx,
+                target: r.targetForceKgf || 0,
+                runs: runs,
+                meanIndicatedForce: meanIndicatedForce,
+                meanRawDeflection: meanRawDeflection,
+                mean: r.meanNetDeflection || 0,
+                meanForce: (r.meanForceKn || 0) / scale,
+                netValues: r.netValues || [0,0,0],
+                runForcesKn: r.runForcesKn || [0,0,0],
+                uncertainty: r.expandedUncertaintyPercent || 0,
+                class: r.classification || 'N/A'
+            };
+        })
+      };
+
+      this.calculateFullSuite('hist-');
+      this.renderReplicaTables('hist-');
+
+      // 6. Modal Toggling
+      document.getElementById('modal-history-list').style.display = 'none';
+      document.getElementById('modal-archive-list').style.display = 'none';
+      document.getElementById('modal-history-view').style.display = 'block';
+
+      // Update View Title and Buttons
+      const isArchived = project.is_archived === 1;
+      this.currentHistoricalData.is_archived = isArchived;
+      document.getElementById('history-view-title').textContent = isArchived ? 'Archived Calibration Data (Read-Only)' : 'Historical Calibration Data (Read-Only)';
+      
+      const btnArchive = document.getElementById('btn-hist-archive');
+      const btnUnarchive = document.getElementById('btn-hist-unarchive');
+      const btnDelete = document.getElementById('btn-hist-delete');
+      if (btnArchive) btnArchive.style.display = isArchived ? 'none' : 'inline-block';
+      if (btnUnarchive) btnUnarchive.style.display = isArchived ? 'inline-block' : 'none';
+
+      // 7. Action Button Overrides (scoped to this project)
       document.getElementById('btn-hist-cert').onclick = async () => {
-        try {
-          const certRes = await fetch('/api/certificate/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ project_id: project.id, format: 'html' })
-          });
-          const html = await certRes.text();
-          const win = window.open('', '_blank');
-          win.document.write(html);
-          win.document.close();
-        } catch(e) { alert('Failed to generate historical cert'); }
+        if (!confirm(`Are you sure you want to generate a certificate for ${project.project_name}?`)) return;
+        alert("Generating Certificate for " + project.project_name);
+        window.location.href = `/api/export/certificate/${project.id}`;
+      };
+
+      document.getElementById('btn-hist-excel').onclick = () => {
+        if (!confirm(`Are you sure you want to export ${project.project_name} to an Excel report?`)) return;
+        alert("Populating Legacy Excel Template...");
+        window.location.href = `/api/export/excel/${project.id}`;
       };
 
       document.getElementById('btn-hist-csv').onclick = () => {
         if (results.length === 0) return;
+        if (!confirm(`Are you sure you want to export ${project.project_name} to CSV?`)) return;
         let csvContent = "data:text/csv;charset=utf-8,Target (kgf),Run 1 (mV/V),Run 2 (mV/V),Run 3 (mV/V),Mean (kN),Repeatability,Uncertainty,Classification\n";
         results.forEach(r => {
           csvContent += [r.target_force_kgf, r.series1_mvv.toFixed(6), r.series2_mvv.toFixed(6), r.series3_mvv.toFixed(6), r.mean_force_kn.toFixed(6), r.repeatability_kn.toFixed(6), r.uncertainty_kn.toFixed(6), r.classification].join(",") + "\n";
@@ -1052,37 +1094,33 @@ class DMP41CalibrationApp {
         document.body.removeChild(link);
       };
 
-      document.getElementById('btn-hist-print').onclick = () => window.print();
-
-      document.getElementById('btn-hist-excel').onclick = () => {
-        window.location.href = `/api/export/excel/${project.id}`;
-      };
-
-      document.getElementById('btn-hist-manual').onclick = () => {
-        this.openManualEntry(project, results);
-      };
-
-      document.getElementById('btn-hist-delete').onclick = async () => {
-        if (confirm("Are you sure you want to permanently erase this historical record? This action cannot be undone.")) {
-          try {
-            const deleteRes = await fetch(`/api/calibration/projects/${project.id}`, { method: 'DELETE' });
-            if (deleteRes.ok) {
-              alert("Historical record erased successfully.");
-              document.getElementById('modal-history-view').style.display = 'none';
-              this.loadHistory(); // Refresh the grid
-            } else {
-              alert("Failed to erase historical record.");
-            }
-          } catch (err) {
-            console.error(err);
-            alert("Error erasing historical record.");
-          }
+      document.getElementById('btn-hist-print').onclick = () => {
+        if (confirm("Prepare document for printing?")) {
+            window.print();
         }
       };
 
-      // Hide list and show view modal
-      document.getElementById('modal-history-list').style.display = 'none';
-      document.getElementById('modal-history-view').style.display = 'block';
+      if (btnArchive) btnArchive.onclick = async () => {
+        if (confirm(`Move project ${project.project_name} to Archive?`)) {
+            const res = await fetch(`/api/calibration/projects/${project.id}/archive`, { method: 'PUT' });
+            if (res.ok) {
+              document.getElementById('modal-history-view').style.display = 'none';
+              document.getElementById('modal-history-list').style.display = 'block';
+              this.loadHistory();
+            }
+        }
+      };
+
+      if (btnUnarchive) btnUnarchive.onclick = async () => {
+        if (confirm(`Restore project ${project.project_name} from Archive?`)) {
+            const res = await fetch(`/api/calibration/projects/${project.id}/unarchive`, { method: 'PUT' });
+            if (res.ok) {
+              document.getElementById('modal-history-view').style.display = 'none';
+              document.getElementById('modal-archive-list').style.display = 'block';
+              this.loadHistory('', true);
+            }
+        }
+      };
 
     } catch (err) {
       console.error('Failed to view history project:', err);
@@ -1233,15 +1271,15 @@ class DMP41CalibrationApp {
           const elC = document.getElementById('t4-c');
           const elDate = document.getElementById('t4-date');
 
-          if (elModel) elModel.textContent = selected.model;
-          if (elCap) elCap.textContent = selected.capacity;
-          if (elSn) elSn.textContent = selected.sn;
-          if (elCert) elCert.textContent = selected.cert_no || 'N/A';
-          if (elU) elU.textContent = selected.uncertainty;
-          if (elA) elA.textContent = selected.coeff_a;
-          if (elB) elB.textContent = selected.coeff_b;
-          if (elC) elC.textContent = selected.coeff_c;
-          if (elDate) elDate.textContent = selected.cal_date || 'N/A';
+          if (elModel) elModel.value = selected.model || '';
+          if (elCap) elCap.value = selected.capacity || '';
+          if (elSn) elSn.value = selected.sn || '';
+          if (elCert) elCert.value = selected.cert_no || 'N/A';
+          if (elU) elU.value = selected.uncertainty || '';
+          if (elA) elA.value = selected.coeff_a || '';
+          if (elB) elB.value = selected.coeff_b || '';
+          if (elC) elC.value = selected.coeff_c || '';
+          if (elDate) elDate.value = selected.cal_date || 'N/A';
 
           alert(`Coefficients loaded for ${selected.model}`);
           this.renderLogger(); 
@@ -1267,10 +1305,32 @@ class DMP41CalibrationApp {
     this.renderLogger();
   }
 
+  addTestPoint(tableType) {
+    const newPoint = {
+      target: 0,
+      runs: [{ m: 0, r: 0 }, { m: 0, r: 0 }, { m: 0, r: 0 }]
+    };
+
+    if (tableType === 'measured') {
+      newPoint.point = this.loggerData.measured.length;
+      newPoint.mean = 0;
+      newPoint.meanForce = 0;
+      newPoint.uncertainty = 0;
+      newPoint.class = 'N/A';
+      this.loggerData.measured.push(newPoint);
+    } else {
+      // Insert before the last element (which is always Max Cap)
+      const lastIndex = this.loggerData.preloading.length - 1;
+      this.loggerData.preloading.splice(lastIndex, 0, newPoint);
+    }
+
+    this.renderLogger();
+  }
+
   // --- Native Logger Methods ---
 
   renderLogger() {
-    this.renderReplicaTables();
+    this.renderReplicaTables('');
   }
 
   formatCellValue(val, isTarget = false, isReading = false) {
@@ -1280,13 +1340,21 @@ class DMP41CalibrationApp {
     return isReading ? parseFloat(val).toFixed(6) : parseFloat(val);
   }
 
-  renderReplicaTables() {
-    this.calculateFullSuite();
+  renderReplicaTables(prefix = '') {
+    // Only calculate suite for main view
+    if (prefix === '') {
+      this.calculateFullSuite();
+    }
+    
+    const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
+    if (!data) return;
+
+    const targetConst = this.unitConstants[this.currentUnit];
 
     // Table 2: Pre-loading
-    const t2Body = document.getElementById('t2-body');
+    const t2Body = document.getElementById(`${prefix}t2-body`);
     if (t2Body) {
-      t2Body.innerHTML = this.loggerData.preloading.map((row, idx) => {
+      t2Body.innerHTML = data.preloading.map((row, idx) => {
         const getCls = (v) => v === "" ? 'l-cell-t2 placeholder-dull' : 'l-cell-t2';
         const v1m = this.formatCellValue(row.runs[0].m);
         const v1r = this.formatCellValue(row.runs[0].r, false, true);
@@ -1295,23 +1363,24 @@ class DMP41CalibrationApp {
         const v3m = this.formatCellValue(row.runs[2].m);
         const v3r = this.formatCellValue(row.runs[2].r, false, true);
 
+        const rowLabel = idx === 0 ? '0.0' : (idx === data.preloading.length - 1 ? 'Max Cap' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th'));
+
         return `
         <tr>
-          <td>${idx === 0 ? '0.0' : 'Max Cap'}</td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="1" data-type="m"><input type="text" class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="1" data-type="r"><input type="text" class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="2" data-type="m"><input type="text" class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="2" data-type="r"><input type="text" class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="3" data-type="m"><input type="text" class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="3" data-type="r"><input type="text" class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td>
+          <td>${rowLabel}</td>
+          <td class="selectable" data-tab="2" data-row="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td>
+          <td class="selectable" data-tab="2" data-row="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td>
+          <td class="selectable" data-tab="2" data-row="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td>
+          <td class="selectable" data-tab="2" data-row="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td>
+          <td class="selectable" data-tab="2" data-row="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td>
+          <td class="selectable" data-tab="2" data-row="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td>
         </tr>`;
       }).join('');
     }
 
-    // Table 3: Measured Data
-    const t3Body = document.getElementById('t3-body');
+    const t3Body = document.getElementById(`${prefix}t3-body`);
     if (t3Body) {
-      t3Body.innerHTML = this.loggerData.measured.map((row, idx) => {
+      t3Body.innerHTML = data.measured.map((row, idx) => {
         const getCls = (v) => v === "" ? 'l-cell-t3 placeholder-dull' : 'l-cell-t3';
         const vt = this.formatCellValue(row.target, true);
         const v1m = this.formatCellValue(row.runs[0].m);
@@ -1324,51 +1393,63 @@ class DMP41CalibrationApp {
         return `
         <tr>
           <td>${idx === 0 ? '0.0' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th')}</td>
-          <td><input type="text" class="${vt === "" ? 'l-t placeholder-dull' : 'l-t'}" data-idx="${idx}" value="${vt}" placeholder="- -"></td>
+          <td><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${vt === "" ? 'l-t placeholder-dull' : 'l-t'}" data-idx="${idx}" value="${vt}" placeholder="- -"></td>
           
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="m"><input type="text" class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td>
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="r"><input type="text" class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td>
+          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td>
+          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td>
           
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="m"><input type="text" class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td>
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="r"><input type="text" class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td>
+          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td>
+          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td>
           
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="m"><input type="text" class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td>
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="r"><input type="text" class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td>
+          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td>
+          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td>
           
-          <td class="calculated" id="t3-meanforce-${idx}">${row.meanIndicatedForce ? row.meanIndicatedForce.toFixed(this.currentUnit === 'kN' ? 6 : 3) : '- -'}</td>
-          <td class="calculated" id="t3-meandef-${idx}">${row.meanRawDeflection ? row.meanRawDeflection.toFixed(6) : '- -'}</td>
+          <td class="calculated" id="${prefix}t3-meanforce-${idx}">${row.meanIndicatedForce ? row.meanIndicatedForce.toFixed(this.currentUnit === 'kN' ? 6 : 3) : '- -'}</td>
+          <td class="calculated" id="${prefix}t3-meandef-${idx}">${row.meanRawDeflection ? row.meanRawDeflection.toFixed(6) : '- -'}</td>
         </tr>`;
       }).join('');
     }
 
-    // Attach listeners to all inputs
-    document.querySelectorAll('.l-cell-t2, .l-cell-t3, .l-t, .env-input').forEach(el => {
-      el.oninput = (e) => {
-        const valStr = e.target.value.trim();
-        const val = (valStr === "- -" || valStr === "") ? 0 : (parseFloat(valStr) || 0);
-        
-        if (el.classList.contains('l-t')) {
-            const idx = e.target.dataset.idx;
-            this.loggerData.measured[idx].target = val;
-            this.calculateFullSuite();
-        } else if (el.classList.contains('env-input')) {
-            this.calculateFullSuite();
-        } else {
-            const { idx, row, run, type, tab } = e.target.parentElement.dataset;
-            if (tab === "2") this.loggerData.preloading[row].runs[run-1][type] = val;
-            else if (tab === "3") {
-              this.loggerData.measured[idx].runs[run-1][type] = val;
+    this.renderTable6(prefix);
+    this.renderTable7(prefix);
+    this.renderTable8(prefix);
+    this.renderTable9(prefix);
+
+    // Attach listeners to all inputs (only for non-historical)
+    if (prefix === '') {
+      document.querySelectorAll('.l-cell-t2, .l-cell-t3, .l-t, .env-input').forEach(el => {
+        el.oninput = (e) => {
+          const valStr = e.target.value.trim();
+          const val = (valStr === "- -" || valStr === "") ? 0 : (parseFloat(valStr) || 0);
+          
+          if (el.classList.contains('l-t')) {
+              const idx = e.target.dataset.idx;
+              this.loggerData.measured[idx].target = val;
               this.calculateFullSuite();
-              this.updateRowUI(idx);
-            }
-        }
-      };
-      el.onfocus = () => {
-        if (this.selectedCell) this.selectedCell.classList.remove('selected-cell');
-        this.selectedCell = el.parentElement;
-        this.selectedCell.classList.add('selected-cell');
-      };
-    });
+          } else if (el.classList.contains('env-input')) {
+              this.calculateFullSuite();
+          } else {
+              const { idx, row, run, type, tab } = e.target.parentElement.dataset;
+              if (tab === "2") {
+                  this.loggerData.preloading[row].runs[run-1][type] = val;
+                  this.calculateFullSuite();
+                  // When Table 2 (Zeroes) change, all Table 3 calculated cells must update
+                  this.loggerData.measured.forEach((_, i) => this.updateRowUI(i));
+              }
+              else if (tab === "3") {
+                this.loggerData.measured[idx].runs[run-1][type] = val;
+                this.calculateFullSuite();
+                this.updateRowUI(idx);
+              }
+          }
+        };
+        el.onfocus = () => {
+          if (this.selectedCell) this.selectedCell.classList.remove('selected-cell');
+          this.selectedCell = el.parentElement;
+          this.selectedCell.classList.add('selected-cell');
+        };
+      });
+    }
   }
 
   updateRowUI(idx) {
@@ -1379,25 +1460,35 @@ class DMP41CalibrationApp {
     if (defEl) defEl.textContent = (row.meanRawDeflection || 0).toFixed(6);
   }
 
-  calculateFullSuite() {
-    const a = parseFloat(document.getElementById('set-coeff-a')?.value || 1);
-    const b = parseFloat(document.getElementById('set-coeff-b')?.value || 0);
-    const c = parseFloat(document.getElementById('set-coeff-c')?.value || 0);
-    const targetConst = this.unitConstants[this.currentUnit];
+  calculateFullSuite(prefix = '') {
+    let a, b, c, targetConst;
+    if (prefix === '') {
+        a = parseFloat(document.getElementById('t4-a')?.value || document.getElementById('set-coeff-a')?.value || 1);
+        b = parseFloat(document.getElementById('t4-b')?.value || document.getElementById('set-coeff-b')?.value || 0);
+        c = parseFloat(document.getElementById('t4-c')?.value || document.getElementById('set-coeff-c')?.value || 0);
+    } else {
+        a = parseFloat(document.getElementById('hist-t4-a')?.textContent || 1);
+        b = parseFloat(document.getElementById('hist-t4-b')?.textContent || 0);
+        c = parseFloat(document.getElementById('hist-t4-c')?.textContent || 0);
+    }
+    targetConst = this.unitConstants[this.currentUnit];
+
+    const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
+    if (!data) return;
 
     // Zeros from Table 2 (index 0 is "0.0" row)
-    const z1 = this.loggerData.preloading[0].runs[0].r || 0;
-    const z2 = this.loggerData.preloading[0].runs[1].r || 0;
-    const z3 = this.loggerData.preloading[0].runs[2].r || 0;
+    const z1 = data.preloading[0].runs[0].r || 0;
+    const z2 = data.preloading[0].runs[1].r || 0;
+    const z3 = data.preloading[0].runs[2].r || 0;
 
-    this.loggerData.measured.forEach((row, idx) => {
-      // Data Logger (Table 3) direct averages
+    data.measured.forEach((row, idx) => {
+      // 1. Raw averages for Table 3 columns
       const activeMs = row.runs.map(r => r.m).filter(m => m !== 0);
       const activeRs = row.runs.map(r => r.r).filter(r => r !== 0);
       row.meanIndicatedForce = activeMs.length > 0 ? activeMs.reduce((acc, v) => acc + v, 0) / activeMs.length : 0;
       row.meanRawDeflection = activeRs.length > 0 ? activeRs.reduce((acc, v) => acc + v, 0) / activeRs.length : 0;
 
-      // Calculate Net Values (dij) by subtracting Run Zeros
+      // 2. Net calculations for math engine
       const n1 = row.runs[0].r !== 0 ? row.runs[0].r - z1 : 0;
       const n2 = row.runs[1].r !== 0 ? row.runs[1].r - z2 : 0;
       const n3 = row.runs[2].r !== 0 ? row.runs[2].r - z3 : 0;
@@ -1414,23 +1505,24 @@ class DMP41CalibrationApp {
       // Calculate Mean Force in kN using Mean Net Deflection
       const forceKn = (a * row.mean) + (b * Math.pow(row.mean, 2)) + (c * Math.pow(row.mean, 3));
       
-      // Calculate Force in Current Unit
+      // Calculate Mean Force (True Reference) in Selected Unit
       row.meanForce = forceKn / targetConst;
     });
 
-    this.renderTable6();
-    this.renderTable7();
-    this.renderTable8();
-    this.renderTable9();
+    this.renderTable6(prefix);
+    this.renderTable7(prefix);
+    this.renderTable8(prefix);
+    this.renderTable9(prefix);
   }
 
-  renderTable6() {
-    const body = document.getElementById('t6-body');
+  renderTable6(prefix = '') {
+    const body = document.getElementById(`${prefix}t6-body`);
     if (!body) return;
     const targetConst = this.unitConstants[this.currentUnit];
+    const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
+    if (!data) return;
     
-    // Filter adaptable rows (keep idx 0 for baseline, and valid targets)
-    const activeRows = this.loggerData.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
+    const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     
     body.innerHTML = activeRows.map((row) => {
       const tKn = ((row.target || 0) * targetConst).toFixed(4);
@@ -1451,12 +1543,14 @@ class DMP41CalibrationApp {
     }).join('');
   }
 
-  renderTable7() {
-    const body = document.getElementById('t7-body');
+  renderTable7(prefix = '') {
+    const body = document.getElementById(`${prefix}t7-body`);
     if (!body) return;
     const targetConst = this.unitConstants[this.currentUnit];
+    const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
+    if (!data) return;
     
-    const activeRows = this.loggerData.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
+    const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     
     body.innerHTML = activeRows.map((row) => {
       const targetKn = (row.target || 0) * targetConst;
@@ -1473,12 +1567,14 @@ class DMP41CalibrationApp {
     }).join('');
   }
 
-  renderTable8() {
-    const body = document.getElementById('t8-body');
+  renderTable8(prefix = '') {
+    const body = document.getElementById(`${prefix}t8-body`);
     if (!body) return;
     const targetConst = this.unitConstants[this.currentUnit];
+    const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
+    if (!data) return;
     
-    const activeRows = this.loggerData.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
+    const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     
     body.innerHTML = activeRows.map((row) => {
       const targetKn = (row.target || 0) * targetConst;
@@ -1496,16 +1592,25 @@ class DMP41CalibrationApp {
     }).join('');
   }
 
-  renderTable9() {
-    const body = document.getElementById('t9-body');
+  renderTable9(prefix = '') {
+    const body = document.getElementById(`${prefix}t9-body`);
     if (!body) return;
 
-    const refUnc = parseFloat(document.getElementById('set-ref-unc')?.value || 0.02);
-    const resolution = parseFloat(document.getElementById('set-resolution')?.value || 0.01);
+    let refUnc, resolution;
+    if (prefix === '') {
+        refUnc = parseFloat(document.getElementById('t4-u')?.value || document.getElementById('set-ref-unc')?.value || 0.02);
+        resolution = parseFloat(document.getElementById('t1-resolution')?.value || 0.01);
+    } else {
+        refUnc = parseFloat(document.getElementById('hist-t4-u')?.textContent || 0.02);
+        resolution = parseFloat(document.getElementById('hist-t1-resolution')?.textContent || 0.01);
+    }
+
     const targetConst = this.unitConstants[this.currentUnit];
     const kgfConst = this.unitConstants['kgf'];
+    const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
+    if (!data) return;
 
-    const activeRows = this.loggerData.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
+    const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
 
     body.innerHTML = activeRows.map((row) => {
       const activeNets = (row.netValues || []).filter((v, i) => row.runs[i].r !== 0);
@@ -1525,7 +1630,7 @@ class DMP41CalibrationApp {
         const sd = this.stdev(activeNets);
         
         // w_rep = ((stdev / sqrt(3)) / |row.mean|) * 100
-        w_rep = ((sd / Math.sqrt(3)) / Math.abs(row.mean)) * 100;
+        w_rep = (Math.abs(row.mean) > 0) ? ((sd / Math.sqrt(3)) / Math.abs(row.mean)) * 100 : 0;
         
         // w_res = (resolution / (mean_force_kgf * 2 * sqrt(3))) * 100
         const meanKgf = row.meanForce * (targetConst / kgfConst);
@@ -1538,25 +1643,21 @@ class DMP41CalibrationApp {
         W_exp = w_comb * 2; 
 
         // Errors (qi, bi, f0)
-        // ISO 376 Relative Accuracy Error: (Indicated - True) / True
         accu_q = row.meanForce !== 0 ? ((row.target - row.meanForce) / row.meanForce) * 100 : 0;
         
-        // Use polynomial calculated forces for repeatability error range to match backend and true ISO rules
         const fKn = row.runForcesKn || [0,0,0];
         const activeForces = fKn.filter(f => f !== 0);
         const range = activeForces.length > 1 ? Math.max(...activeForces) - Math.min(...activeForces) : 0;
         const meanKn = row.meanForce * targetConst;
         rep_b = meanKn !== 0 ? (range / Math.abs(meanKn)) * 100 : 0;
         
-        zero_f0 = 0; // Simplified baseline
+        zero_f0 = 0;
         
-        // ISO 7500-1 Classification based on accuracy and repeatability
-        const maxError = Math.max(Math.abs(accu_q), Math.abs(rep_b), Math.abs(zero_f0));
-        if (maxError <= 0.5) className = '0.5';
-        else if (maxError <= 1.0) className = '1.0';
-        else if (maxError <= 2.0) className = '2.0';
-        else if (maxError <= 3.0) className = '3.0';
-        else className = 'Unclassified';
+        // Classification based on Uncertainty (Previous Logic)
+        if (W_exp < 0.05) className = 'Class 0';
+        else if (W_exp < 0.1) className = 'Class 1';
+        else if (W_exp < 0.2) className = 'Class 2';
+        else className = 'Class 3';
       }
 
       return `
@@ -1604,36 +1705,6 @@ class DMP41CalibrationApp {
     }
   }
 
-  calculateLoggerRow(idx) {
-    const row = this.loggerData.measured[idx];
-    const a = parseFloat(document.getElementById('set-coeff-a')?.value || 1);
-    const b = parseFloat(document.getElementById('set-coeff-b')?.value || 0);
-    const c = parseFloat(document.getElementById('set-coeff-c')?.value || 0);
-    const targetConst = this.unitConstants[this.currentUnit];
-
-    // Calculate Force for each run (D -> Force in kN)
-    const runForces = row.runs.map(run => {
-        if (run.r === 0) return 0;
-        return (a * run.r) + (b * Math.pow(run.r, 2)) + (c * Math.pow(run.r, 3));
-    });
-
-    const activeForces = runForces.filter(f => f !== 0);
-    
-    if (activeForces.length > 0) {
-      // Mean in kN
-      const avgKn = activeForces.reduce((sum, f) => sum + f, 0) / activeForces.length;
-      
-      // Convert Mean to Display Unit
-      row.mean = avgKn / targetConst;
-
-      // Simple Uncertainty Mock (matching Excel behavior)
-      if (activeForces.length === 3) {
-          row.uncertainty = 0.025; 
-          row.class = row.uncertainty < 0.05 ? 'Class 0' : 'Class 1';
-      }
-    }
-  }
-
   clearLoggerData() {
     if (confirm("Clear all data in the logger tables?")) {
       this.loggerData.preloading.forEach(r => r.runs.forEach(run => { run.m = 0; run.r = 0; }));
@@ -1646,7 +1717,11 @@ class DMP41CalibrationApp {
   }
 
   async syncLoggerToExcel() {
-    // This will format the loggerData and send it to the /api/export/excel route
+    if (!this.currentProject) {
+      alert("Please save the project first before exporting.");
+      return;
+    }
+    if (!confirm("Are you sure you want to export the current data to an Excel report?")) return;
     alert("Syncing current table state to Excel Template...");
     window.location.href = `/api/export/excel/${this.currentProject.id}?data=${JSON.stringify(this.loggerData)}`;
   }
@@ -1654,26 +1729,21 @@ class DMP41CalibrationApp {
   loadDemoData() {
     if (!confirm("Load test data from Excel legacy file? This will unlock all tables and overwrite current entries.")) return;
 
-    // 0. Bypass Workflow Locks
     this.demoMode = true;
     const refNoEl = document.getElementById('t1-ref-no');
     const capEl = document.getElementById('t1-capacity');
     if (refNoEl) refNoEl.value = "DEMO-2026-XLS";
     if (capEl) capEl.value = "100";
     
-    // Trigger any dependent logic for these fields
     if (refNoEl) refNoEl.dispatchEvent(new Event('input'));
     if (capEl) capEl.dispatchEvent(new Event('input'));
 
-    // 1. Set Load Cell (HBM/C3H3)
     const sel = document.getElementById('lc-selector');
-    sel.value = "3"; // ID for HBM/C3H3
+    sel.value = "3"; 
     sel.dispatchEvent(new Event('change'));
 
-    // 2. Set Unit to kgf
     this.setSystemUnit('kgf');
 
-    // 3. Populate Measured Data (Extracted from Excel Row 17-22)
     const demoPoints = [
       { target: 20, r1: 0.038718, r2: 0.038906, r3: 0.039014 },
       { target: 40, r1: 0.079760, r2: 0.079224, r3: 0.079328 },
@@ -1682,27 +1752,23 @@ class DMP41CalibrationApp {
       { target: 100, r1: 0.201072, r2: 0.200842, r3: 0.200508 }
     ];
 
-    // Populate Baseline 0 in preloading
     const baseline = { target: 0, r1: -0.002132, r2: -0.002134, r3: -0.002132 };
     this.loggerData.preloading[0].target = baseline.target;
     this.loggerData.preloading[0].runs[0].m = baseline.target; this.loggerData.preloading[0].runs[0].r = baseline.r1;
     this.loggerData.preloading[0].runs[1].m = baseline.target; this.loggerData.preloading[0].runs[1].r = baseline.r2;
     this.loggerData.preloading[0].runs[2].m = baseline.target; this.loggerData.preloading[0].runs[2].r = baseline.r3;
 
-    // Reset all measured points first
     this.loggerData.measured.forEach(row => {
       row.target = 0;
       row.runs.forEach(run => { run.m = 0; run.r = 0; });
     });
 
-    // Populate measured[0] with the baseline point so it displays on the 0.0 row
     const zeroRow = this.loggerData.measured[0];
     zeroRow.target = baseline.target;
     zeroRow.runs[0].m = baseline.target; zeroRow.runs[0].r = baseline.r1;
     zeroRow.runs[1].m = baseline.target; zeroRow.runs[1].r = baseline.r2;
     zeroRow.runs[2].m = baseline.target; zeroRow.runs[2].r = baseline.r3;
 
-    // Populate measured points starting at index 1
     demoPoints.forEach((p, i) => {
       const row = this.loggerData.measured[i + 1];
       if (row) {
@@ -1713,9 +1779,8 @@ class DMP41CalibrationApp {
       }
     });
     
-    this.calculateFullSuite(); // Update all tables
+    this.calculateFullSuite(); 
 
-    // 4. Populate Env
     document.getElementById('t5-temp-b').value = 23.0;
     document.getElementById('t5-temp-a').value = 23.0;
     document.getElementById('t5-hum-b').value = 39.0;

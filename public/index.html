@@ -61,6 +61,8 @@
     }
 
     #dashboard { padding-bottom: 20px; }
+    .btn-small { background-color: #001D53; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; margin-top: 10px; }
+    .btn-small:hover { background-color: #003399; }
   </style>
 </head>
 <body>
@@ -69,8 +71,9 @@
     <header>
       <h1>DMP41 Calibration System</h1>
       <nav>
-        <a href="#monitor">Live Monitor</a>
+        <a href="#live-monitor">Live Monitor</a>
         <a href="#" id="nav-history-link-btn">History</a>
+        <a href="#" id="nav-archive-link-btn">Archive</a>
         <a href="#" id="nav-settings">Settings</a>
       </nav>
     </header>
@@ -126,29 +129,9 @@
             <h3 style="font-size: 1em; margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Connection Settings</h3>
             <p style="margin-bottom: 5px;">Connection: <span id="conn-status">Checking...</span></p>
 
-            <div style="margin-bottom: 8px;">
-              <select id="main-conn-type" style="width: 100%; padding: 4px;">
-                <option value="lan">LAN</option>
-                <option value="usb">USB</option>
-              </select>
-            </div>
-
-            <!-- Mini TCP Settings -->
-            <div id="main-tcp-settings" style="display: flex; gap: 5px; margin-bottom: 8px;">
+            <div style="display: flex; gap: 5px; margin-bottom: 8px;">
               <input type="text" id="main-ip" placeholder="IP Address" value="192.168.1.100" style="flex: 2; padding: 4px;">
               <input type="number" id="main-port" placeholder="Port" value="1234" style="flex: 1; padding: 4px;">
-            </div>
-
-            <!-- Mini Serial Settings -->
-            <div id="main-serial-settings" style="display: none; gap: 5px; margin-bottom: 8px;">
-              <select id="main-com" style="flex: 2; padding: 4px;">
-                <option value="">Auto-Detecting...</option>
-              </select>
-              <select id="main-baud" style="flex: 1; padding: 4px;" title="Baud Rate">
-                <option value="4800" selected>4800</option>
-                <option value="9600">9600</option>
-                <option value="19200">19200</option>
-              </select>
             </div>
 
             <p style="margin-bottom: 5px;">
@@ -169,11 +152,6 @@
             <h3 style="font-size: 1em; margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Settings Configuration</h3>
             <p style="font-size: 0.9em; margin-bottom: 2px;">Instrument: <span id="disp-instrument">DMP41</span></p>
             <p style="font-size: 0.9em; margin-bottom: 2px;">Channel: <span id="disp-channel">1</span></p>
-            <p style="font-size: 0.9em; margin-bottom: 2px;">Rate: <span id="disp-reading-rate">1 reading/sec</span></p>
-            <p style="font-size: 0.9em; margin-bottom: 2px;">Method: <span id="disp-method">E. Sequence-2</span></p>
-            <p style="font-size: 0.9em; margin-bottom: 2px;">Meas Time/Int: <span id="disp-meas-time">1</span> sec</p>
-            <p style="font-size: 0.9em; margin-bottom: 2px;">File Style: <span id="disp-save-style">KC</span></p>
-            <p style="font-size: 0.9em; margin-bottom: 2px;">Calc Avg: <span id="disp-avg">Yes</span></p>
             <div style="margin-top: 10px;">
               <button id="btn-config">Advanced Settings</button>
             </div>
@@ -253,6 +231,9 @@
               <!-- JS rows -->
             </tbody>
           </table>
+          <div style="margin-top: 5px;">
+            <button id="btn-add-t2-row" class="btn-small">+ Add Test Point</button>
+          </div>
         </div>
 
         <!-- Table 3: Measured Data -->
@@ -271,17 +252,20 @@
               <!-- JS rows -->
             </tbody>
           </table>
+          <div style="margin-top: 5px;">
+            <button id="btn-add-t3-row" class="btn-small">+ Add Test Point</button>
+          </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
           <div class="replica-section">
             <h3>3.) Force Transducer Information</h3>
             <table class="excel-table table-4">
-              <tr><td class="excel-label">Load Cell</td><td id="t4-model">-</td><td class="excel-label">A</td><td id="t4-a">-</td></tr>
-              <tr><td class="excel-label">Capacity</td><td id="t4-cap">-</td><td class="excel-label">B</td><td id="t4-b">-</td></tr>
-              <tr><td class="excel-label">Serial No.</td><td id="t4-sn">-</td><td class="excel-label">C</td><td id="t4-c">-</td></tr>
-              <tr><td class="excel-label">Cal. Cert. No.</td><td id="t4-cert">-</td><td class="excel-label">U, %</td><td id="t4-u">-</td></tr>
-              <tr><td class="excel-label">Cal Date</td><td id="t4-date">-</td><td class="excel-label">k</td><td>2.0</td></tr>
+              <tr><td class="excel-label">Load Cell</td><td><input type="text" id="t4-model" placeholder="-"></td><td class="excel-label">A</td><td><input type="text" id="t4-a" placeholder="-"></td></tr>
+              <tr><td class="excel-label">Capacity</td><td><input type="text" id="t4-cap" placeholder="-"></td><td class="excel-label">B</td><td><input type="text" id="t4-b" placeholder="-"></td></tr>
+              <tr><td class="excel-label">Serial No.</td><td><input type="text" id="t4-sn" placeholder="-"></td><td class="excel-label">C</td><td><input type="text" id="t4-c" placeholder="-"></td></tr>
+              <tr><td class="excel-label">Cal. Cert. No.</td><td><input type="text" id="t4-cert" placeholder="-"></td><td class="excel-label">U, %</td><td><input type="text" id="t4-u" placeholder="-"></td></tr>
+              <tr><td class="excel-label">Cal Date</td><td><input type="text" id="t4-date" placeholder="-"></td><td class="excel-label">k</td><td>2.0</td></tr>
             </table>
           </div>
           <!-- Table 5: Env Conditions -->
@@ -301,7 +285,7 @@
 
           <!-- Table 6: Net value & Mean Value -->
           <div class="replica-section">
-            <h3>5.) Net value (dij) & Mean Value (di) Calculation, units in kN</h3>
+            <h3>6.) NET VALUES AND MEAN DEFLECTION</h3>
           <table class="excel-table table-6">
             <thead>
               <tr class="excel-header-main">
@@ -315,7 +299,7 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
             <!-- Table 7: Linear Interpolation -->
             <div class="replica-section">
-                <h3>6.) Linear Interpolation</h3>
+                <h3>7.) REFERENCE FORCE ESTIMATION (Linear Interpolation)</h3>
                 <table class="excel-table table-7">
                     <thead><tr class="excel-header-main"><th>Force (kN)</th><th>1st (0˚)</th><th>2nd (120˚)</th><th>3rd (240˚)</th><th>Mean Value</th></tr></thead>
                     <tbody id="t7-body"></tbody>
@@ -323,7 +307,7 @@
             </div>
             <!-- Table 8: Estimation of Reference Force -->
             <div class="replica-section">
-                <h3>7. Estimation of Reference Force</h3>
+                <h3>8.) REFERENCE FORCE ESTIMATION (Polynomial)</h3>
                 <table class="excel-table table-8">
                     <thead><tr class="excel-header-main"><th>Force (kN)</th><th>1st (0˚)</th><th>2nd (120˚)</th><th>3rd (240˚)</th><th>Mean Value</th></tr></thead>
                     <tbody id="t8-body"></tbody>
@@ -365,32 +349,174 @@
     <div class="modal-content" style="max-width: 900px; display: flex; flex-direction: column;">
       <span class="close" id="close-history-list">&times;</span>
       <h2 style="flex-shrink: 0;">Calibration History</h2>
+      <div style="margin-top: 10px; flex-shrink: 0;">
+        <input type="text" id="history-search" placeholder="Search by Project Name, S/N, or Date..." style="padding: 8px; width: 100%; border: 1px solid #ddd; border-radius: 5px;">
+      </div>
       <div id="history-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-top: 15px; overflow-y: auto; flex-grow: 1; padding-right: 10px;">
         <p>No history found. Complete a calibration and click 'Save to History'.</p>
       </div>
     </div>
   </div>
 
+  <!-- Archive List Modal -->
+  <div id="modal-archive-list" class="modal">
+    <div class="modal-content" style="max-width: 900px; display: flex; flex-direction: column;">
+      <span class="close" id="close-archive-list">&times;</span>
+      <h2 style="flex-shrink: 0;">Archived Calibration Data</h2>
+      <div style="margin-top: 10px; flex-shrink: 0;">
+        <input type="text" id="archive-search" placeholder="Search by Project Name, S/N, or Date..." style="padding: 8px; width: 100%; border: 1px solid #ddd; border-radius: 5px;">
+      </div>
+      <div id="archive-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-top: 15px; overflow-y: auto; flex-grow: 1; padding-right: 10px;">
+        <p>No archived data found.</p>
+      </div>
+    </div>
+  </div>
+
   <!-- History View Modal -->
   <div id="modal-history-view" class="modal">
-    <div class="modal-content" style="max-width: 900px; display: flex; flex-direction: column;">
+    <div class="modal-content" style="max-width: 1200px; display: flex; flex-direction: column; width: 95%;">
       <span class="close" id="close-history-view">&times;</span>
-      <h2 style="flex-shrink: 0;">Historical Calibration Data</h2>
-      <div id="history-project-display" style="flex-shrink: 0; text-align: left; font-size: 0.9em; background: #f9f9f9; padding: 10px; border-radius: 5px; border: 1px solid #eee; margin-bottom: 15px;">
+      <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+        <button id="btn-hist-back" style="padding: 5px 15px; background: #eee; color: #333; border: 1px solid #ccc;">&larr; Back</button>
+        <h2 style="margin: 0;" id="history-view-title">Historical Calibration Data (Read-Only)</h2>
       </div>
-      <div style="overflow-y: auto; flex-grow: 1; margin-bottom: 20px;">
-        <table style="width: 100%; text-align: center;">
-          <thead>
-            <tr>
-              <th>Point</th><th>Target</th><th>Run 1</th><th>Run 2</th><th>Run 3</th><th>Mean</th><th>Class</th>
-            </tr>
-          </thead>
-          <tbody id="history-table-body">
-          </tbody>
-        </table>
+
+      <div style="overflow-y: auto; flex-grow: 1; padding-right: 10px;">
+        <!-- Table 1 Replica -->
+        <div class="replica-section">
+          <h3>1.) DESCRIPTION OF THE INSTRUMENT</h3>
+          <table class="excel-table table-1">
+            <tr><td class="excel-label">Date of Calibration:</td><td id="hist-t1-date">-</td><td class="excel-label">Mode:</td><td id="hist-t1-mode">-</td></tr>
+            <tr><td class="excel-label">Request Ref. No.:</td><td id="hist-t1-ref-no">-</td><td class="excel-label">Capacity:</td><td id="hist-t1-capacity">-</td></tr>
+            <tr><td class="excel-label">Calibration Item:</td><td id="hist-t1-item">-</td><td class="excel-label">Range:</td><td id="hist-t1-range">-</td></tr>
+            <tr><td class="excel-label">Make / Model No.:</td><td id="hist-t1-make">-</td><td class="excel-label">Increment:</td><td id="hist-t1-increment">-</td></tr>
+            <tr><td class="excel-label">Serial No. / ID No.:</td><td id="hist-t1-sn">-</td><td class="excel-label">Resolution:</td><td id="hist-t1-resolution">-</td></tr>
+          </table>
+        </div>
+
+        <!-- Table 2 Replica -->
+        <div class="replica-section">
+          <h3>2.) PRE-LOADING DATA, kgf</h3>
+          <table class="excel-table table-2">
+            <thead>
+              <tr class="excel-header-main">
+                <th>Indicated force</th><th>1st (0˚)</th><th>Indicated force</th><th> 2nd (120˚)</th><th>Indicated force</th><th>3rd (240˚)</th>
+              </tr>
+              <tr class="excel-header-sub">
+                <th>Machine</th><th>Reading</th><th>Machine</th><th>Reading</th><th>Machine</th><th>Reading</th>
+              </tr>
+            </thead>
+            <tbody id="hist-t2-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Table 3 Replica -->
+        <div class="replica-section">
+          <h3>3.) MEASURED DATA, kgf</h3>
+          <table class="excel-table table-3">
+            <thead>
+              <tr class="excel-header-main">
+                <th rowspan="2">Calibration Points</th><th rowspan="2">Expected Machine Indication</th><th>Indicated force</th><th>1st (0˚)</th><th>Indicated force</th><th> 2nd (120˚)</th><th>Indicated force</th><th>3rd (240˚)</th><th rowspan="2">Mean Force</th><th rowspan="2">Mean deflection</th>
+              </tr>
+              <tr class="excel-header-sub">
+                <th>Machine</th><th>Reading</th><th>Machine</th><th>Reading</th><th>Machine</th><th>Reading</th>
+              </tr>
+            </thead>
+            <tbody id="hist-t3-body"></tbody>
+          </table>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+          <!-- Table 4 Replica -->
+          <div class="replica-section">
+            <h3>4.) Force Transducer Information</h3>
+            <table class="excel-table table-4">
+              <tr><td class="excel-label">Load Cell</td><td id="hist-t4-model">-</td><td class="excel-label">A</td><td id="hist-t4-a">-</td></tr>
+              <tr><td class="excel-label">Capacity</td><td id="hist-t4-cap">-</td><td class="excel-label">B</td><td id="hist-t4-b">-</td></tr>
+              <tr><td class="excel-label">Serial No.</td><td id="hist-t4-sn">-</td><td class="excel-label">C</td><td id="hist-t4-c">-</td></tr>
+              <tr><td class="excel-label">Cal. Cert. No.</td><td id="hist-t4-cert">-</td><td class="excel-label">U, %</td><td id="hist-t4-u">-</td></tr>
+              <tr><td class="excel-label">Cal Date</td><td id="hist-t4-date">-</td><td class="excel-label">k</td><td>2.0</td></tr>
+            </table>
+          </div>
+
+          <!-- Table 5 Replica -->
+          <div class="replica-section">
+            <h3>5.) Environmental Conditions</h3>
+            <table class="excel-table table-5">
+              <tr><th rowspan="2">Conditions</th><th colspan="2">Temperature, ˚C</th><th colspan="2">Humidity, %</th></tr>
+              <tr><th>Before</th><th>After</th><th>Before</th><th>After</th></tr>
+              <tr><td>Measured:</td><td id="hist-t5-temp-b">-</td><td id="hist-t5-temp-a">-</td><td id="hist-t5-hum-b">-</td><td id="hist-t5-hum-a">-</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- Analysis Tables (6-9) Replica -->
+        <div class="replica-section">
+          <h3>6.) NET VALUES AND MEAN DEFLECTION</h3>
+          <table class="excel-table">
+            <thead>
+              <tr class="excel-header-main">
+                <th rowspan="2">No.</th><th colspan="2">1st run</th><th colspan="2">2nd run</th><th colspan="2">3rd run</th><th colspan="2">Mean deflection</th>
+              </tr>
+              <tr class="excel-header-sub">
+                <th>Force, kN</th><th>d1j</th><th>Force, kN</th><th>d2j</th><th>Force, kN</th><th>d3j</th><th>Force, kN</th><th>dj</th>
+              </tr>
+            </thead>
+            <tbody id="hist-t6-body"></tbody>
+          </table>
+        </div>
+
+        <div class="replica-section">
+          <h3>7.) REFERENCE FORCE ESTIMATION (Linear Interpolation)</h3>
+          <table class="excel-table">
+            <thead>
+              <tr class="excel-header-sub">
+                <th>Target Force (kN)</th><th>Deflection 1 (d1j)</th><th>Deflection 2 (d2j)</th><th>Deflection 3 (d3j)</th><th>Mean Deflection (dj)</th>
+              </tr>
+            </thead>
+            <tbody id="hist-t7-body"></tbody>
+          </table>
+        </div>
+
+        <div class="replica-section">
+          <h3>8.) REFERENCE FORCE ESTIMATION (Polynomial)</h3>
+          <table class="excel-table">
+            <thead>
+              <tr class="excel-header-sub">
+                <th>Target Force (kN)</th><th>Force 1 (kN)</th><th>Force 2 (kN)</th><th>Force 3 (kN)</th><th>Mean Force (kN)</th>
+              </tr>
+            </thead>
+            <tbody id="hist-t8-body"></tbody>
+          </table>
+        </div>
+
+        <div class="replica-section">
+          <h3>9.) ISO 7500-1 CLASSIFICATION & UNCERTAINTY</h3>
+          <table class="excel-table">
+            <thead>
+              <tr class="excel-header-main">
+                <th>Calibration Points</th>
+                <th>wrep,i (%)</th>
+                <th>wres,i (%)</th>
+                <th>wstd (%)</th>
+                <th>wci (%)</th>
+                <th>Wi (%)</th>
+                <th>qi (%)</th>
+                <th>bi (%)</th>
+                <th>f0 (%)</th>
+                <th>Class</th>
+              </tr>
+            </thead>
+            <tbody id="hist-t9-body"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="controls action-bar" style="flex-shrink: 0; text-align: right; display: flex; justify-content: space-between;">
-        <button id="btn-hist-delete" >Erase Record</button>
+
+      <div class="controls action-bar" style="flex-shrink: 0; text-align: right; display: flex; justify-content: space-between; margin-top: 15px; border-top: 1px solid #ddd; padding-top: 15px;">
+        <div>
+          <button id="btn-hist-archive" style="background: #e6a800;">Archive Record</button>
+          <button id="btn-hist-unarchive" style="background: #28a745; display: none;">Restore from Archive</button>
+        </div>
         <div>
           <button id="btn-hist-manual" >Manual Entry</button>
           <button id="btn-hist-excel" >Export to Excel</button>
@@ -412,25 +538,9 @@
         
         <div class="settings-box">
           <h3 style="margin-top:0; border-bottom: 2px solid #ddd; padding-bottom: 5px;">1. Hardware Interface</h3>
-          <div class="form-group">
-            <label>Connection Type</label>
-            <select id="set-conn-type">
-              <option value="tcp">TCP/IP (Direct LAN)</option>
-              <option value="usb-lan">USB to LAN Adapter</option>
-              <option value="lan-usb">LAN to USB Adapter</option>
-              <option value="serial">USB to Serial (COM Port)</option>
-            </select>
-          </div>
           <div id="tcp-settings" class="settings-inline-group">
             <div class="form-group"><label>IP Address</label><input type="text" id="set-ip" value="192.168.1.100"></div>
             <div class="form-group"><label>Port</label><input type="number" id="set-port" value="1234"></div>
-          </div>
-          <div id="serial-settings" class="settings-inline-group" style="display: none;">
-            <div class="form-group"><label>COM Port</label><select id="set-com"><option>COM1</option><option>COM2</option></select></div>
-            <div class="form-group"><label>Baud Rate</label><select id="set-baud"><option>1200</option><option>2400</option><option selected>4800</option><option>9600</option><option>19200</option><option>38400</option></select></div>
-            <div class="form-group"><label>Parity</label><select id="set-parity"><option>None</option><option>Odd</option><option>Even</option></select></div>
-            <div class="form-group"><label>Data Bits</label><select id="set-data-bits"><option>7</option><option selected>8</option></select></div>
-            <div class="form-group"><label>Stop Bits</label><select id="set-stop-bits"><option selected>1</option><option>2</option></select></div>
           </div>
           <div class="settings-inline-group" style="margin-top: 15px;">
             <div class="form-group"><label>Instrument</label><select id="set-instrument"><option selected>DMP41</option><option>DMP40</option><option>DK38</option><option>FINE</option><option>MGCplus</option></select></div>
@@ -439,45 +549,7 @@
         </div>
 
         <div class="settings-box">
-          <h3 style="margin-top:0; border-bottom: 2px solid #ddd; padding-bottom: 5px;">2. Measurement Settings</h3>
-          <div class="form-group">
-            <label>Reading Method</label>
-            <select id="set-method">
-              <option value="A">A. One Point Reading</option>
-              <option value="B">B. Repeat reading at the same interval</option>
-              <option value="C">C. One point reading after set time</option>
-              <option value="D">D. Reading according to Sequence-1</option>
-              <option value="E" selected>E. Reading according to Sequence-2</option>
-            </select>
-          </div>
-          <div class="settings-inline-group">
-            <div class="form-group">
-              <label>Reading Rate</label>
-              <input type="text" id="set-reading-rate" value="1 reading/sec">
-            </div>
-            <div class="form-group">
-              <label>Loading Points</label>
-              <input type="number" id="set-loading-points" value="10">
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Measurement Time / Interval (sec)</label>
-            <input type="number" id="set-meas-time" value="1">
-          </div>
-          <div class="settings-inline-group">
-            <div class="form-group">
-              <label>Output File Style</label>
-              <select id="set-save-style"><option value="KC">KC</option><option value="Testing">Testing</option></select>
-            </div>
-            <div class="form-group">
-              <label>Calculate Average?</label>
-              <select id="set-avg"><option value="Yes">Yes</option><option value="No">No</option></select>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-box">
-          <h3 style="margin-top:0; border-bottom: 2px solid #ddd; padding-bottom: 5px;">3. Load Cell & Calculations</h3>
+          <h3 style="margin-top:0; border-bottom: 2px solid #ddd; padding-bottom: 5px;">2. Load Cell & Calculations</h3>
           <p style="margin-top: 0; font-size: 0.85em; color: #555;"><strong>Polynomial (F = AD + BD² + CD³)</strong></p>
           <div class="settings-inline-group">
             <div class="form-group"><label>Coeff A</label><input type="number" step="any" id="set-coeff-a" value="1.0"></div>
@@ -572,5 +644,4 @@
 
   <script src="js/main.js?v=14"></script>
 </body>
-</html></body>
 </html>

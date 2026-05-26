@@ -334,7 +334,6 @@ tbody tr:nth-child(even) {
 }
 
 .placeholder-dull {
-  pointer-events: none; /* Make it strictly read-only when it's just a placeholder */
   background-color: transparent !important;
 }
 
