@@ -20,6 +20,31 @@ app.use(express.static('public'));
 
 // Initialize services
 const dmp41 = new DMP41Interface(process.env.DMP41_HOST, process.env.DMP41_PORT);
+
+// Load saved settings if they exist to initialize DMP41 connection configuration
+if (fs.existsSync(SETTINGS_FILE)) {
+  try {
+    const savedSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    if (savedSettings.connection) {
+      if (savedSettings.connection.type) {
+        dmp41.connectionType = savedSettings.connection.type;
+      }
+      if (savedSettings.connection.tcp) {
+        dmp41.host = savedSettings.connection.tcp.ip || dmp41.host;
+        dmp41.port = savedSettings.connection.tcp.port || dmp41.port;
+      }
+      if (savedSettings.connection.serial) {
+        dmp41.serialConfig = savedSettings.connection.serial;
+      }
+    }
+    if (savedSettings.channel) {
+      dmp41.currentChannel = parseInt(savedSettings.channel);
+    }
+  } catch (err) {
+    console.error('Failed to load initial dmp41 settings:', err);
+  }
+}
+
 const calibEngine = new CalibrationEngine();
 const certGen = new CertificateGenerator();
 
@@ -181,8 +206,29 @@ app.post('/api/hardware/mode', (req, res) => {
   }
 });
 
+app.get('/api/hardware/ports', async (req, res) => {
+  try {
+    const { SerialPort } = require('serialport');
+    const ports = await SerialPort.list();
+    res.json(ports);
+  } catch (e) {
+    res.json([]);
+  }
+});
+
 app.post('/api/hardware/connect', async (req, res) => {
   try {
+    // Dynamically apply settings from the UI payload
+    if (req.body && req.body.type) {
+      dmp41.connectionType = req.body.type;
+      if (req.body.type === 'tcp' && req.body.tcp) {
+        dmp41.host = req.body.tcp.ip || dmp41.host;
+        dmp41.port = req.body.tcp.port || dmp41.port;
+      } else if (req.body.type === 'serial' && req.body.serial) {
+        dmp41.serialConfig = { ...dmp41.serialConfig, ...req.body.serial };
+      }
+    }
+    
     await dmp41.connect();
     res.json({ status: 'success', connected: true });
   } catch (err) {
@@ -467,10 +513,18 @@ app.post('/api/settings/save', (req, res) => {
   try {
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(req.body, null, 2), 'utf8');
     
-    // Apply new TCP settings directly to the hardware interface
-    if (req.body.connection && req.body.connection.tcp) {
-      dmp41.host = req.body.connection.tcp.ip || dmp41.host;
-      dmp41.port = req.body.connection.tcp.port || dmp41.port;
+    // Apply new connection settings directly to the hardware interface
+    if (req.body.connection) {
+      if (req.body.connection.type) {
+        dmp41.connectionType = req.body.connection.type;
+      }
+      if (req.body.connection.tcp) {
+        dmp41.host = req.body.connection.tcp.ip || dmp41.host;
+        dmp41.port = req.body.connection.tcp.port || dmp41.port;
+      }
+      if (req.body.connection.serial) {
+        dmp41.serialConfig = req.body.connection.serial;
+      }
     }
     
     if (req.body.channel) {

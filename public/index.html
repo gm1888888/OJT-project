@@ -124,20 +124,44 @@
 
           <div class="status-box">
             <h3 style="font-size: 1em; margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Connection Settings</h3>
-            <p>Connection: <span id="conn-status">Checking...</span></p>
-            <p>Address: <span id="disp-address">...</span></p>
-            <p>Port: <span id="disp-port">...</span></p>
-            <p>
+            <p style="margin-bottom: 5px;">Connection: <span id="conn-status">Checking...</span></p>
+
+            <div style="margin-bottom: 8px;">
+              <select id="main-conn-type" style="width: 100%; padding: 4px;">
+                <option value="lan">LAN</option>
+                <option value="usb">USB</option>
+              </select>
+            </div>
+
+            <!-- Mini TCP Settings -->
+            <div id="main-tcp-settings" style="display: flex; gap: 5px; margin-bottom: 8px;">
+              <input type="text" id="main-ip" placeholder="IP Address" value="192.168.1.100" style="flex: 2; padding: 4px;">
+              <input type="number" id="main-port" placeholder="Port" value="1234" style="flex: 1; padding: 4px;">
+            </div>
+
+            <!-- Mini Serial Settings -->
+            <div id="main-serial-settings" style="display: none; gap: 5px; margin-bottom: 8px;">
+              <select id="main-com" style="flex: 2; padding: 4px;">
+                <option value="">Auto-Detecting...</option>
+              </select>
+              <select id="main-baud" style="flex: 1; padding: 4px;" title="Baud Rate">
+                <option value="4800" selected>4800</option>
+                <option value="9600">9600</option>
+                <option value="19200">19200</option>
+              </select>
+            </div>
+
+            <p style="margin-bottom: 5px;">
               Mode: 
-              <select id="hw-mode-select">
+              <select id="hw-mode-select" style="padding: 4px;">
                 <option value="" disabled selected>Select Mode</option>
                 <option value="demo">Demo</option>
                 <option value="live">Live</option>
               </select>
             </p>
-            <div style="margin-top: 10px;">
-              <button id="btn-connect" disabled>Connect</button>
-              <button id="btn-terminal">Terminal</button>
+            <div style="margin-top: 10px; display: flex; gap: 5px;">
+              <button id="btn-connect" style="flex: 1;" disabled>Connect</button>
+              <button id="btn-terminal" style="flex: 1;">Terminal</button>
             </div>
           </div>
 
@@ -391,8 +415,10 @@
           <div class="form-group">
             <label>Connection Type</label>
             <select id="set-conn-type">
-              <option value="tcp">TCP/IP (DMP41 Default)</option>
-              <option value="serial">Serial (Legacy DMP40)</option>
+              <option value="tcp">TCP/IP (Direct LAN)</option>
+              <option value="usb-lan">USB to LAN Adapter</option>
+              <option value="lan-usb">LAN to USB Adapter</option>
+              <option value="serial">USB to Serial (COM Port)</option>
             </select>
           </div>
           <div id="tcp-settings" class="settings-inline-group">
@@ -546,4 +572,5 @@
 
   <script src="js/main.js?v=14"></script>
 </body>
+</html></body>
 </html>

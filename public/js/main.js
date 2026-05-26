@@ -35,6 +35,7 @@ class DMP41CalibrationApp {
     
     this.initEventListeners();
     this.initChart();
+    this.fetchAvailablePorts();
     this.checkHardwareStatus(); // Initial check
     this.loadSettings();
     
@@ -76,6 +77,24 @@ class DMP41CalibrationApp {
     // Force the "New Project" modal to show on startup
     const modalNewProject = document.getElementById('modal-new-project');
     if (modalNewProject) modalNewProject.style.display = 'block';
+  }
+
+  async fetchAvailablePorts() {
+    try {
+      const res = await fetch('/api/hardware/ports');
+      const ports = await res.json();
+      const comSelect = document.getElementById('main-com');
+      const advancedComSelect = document.getElementById('set-com');
+      
+      const optionsHtml = ports.length === 0 
+        ? '<option value="">No COM Ports Found</option>'
+        : ports.map(p => `<option value="${p.path}">${p.path} ${p.manufacturer ? '('+p.manufacturer+')' : ''}</option>`).join('');
+        
+      if (comSelect) comSelect.innerHTML = optionsHtml;
+      if (advancedComSelect) advancedComSelect.innerHTML = optionsHtml;
+    } catch(e) {
+       console.warn('Failed to fetch COM ports', e);
+    }
   }
 
   stdev(arr) {
@@ -146,21 +165,24 @@ class DMP41CalibrationApp {
       if (!settings || Object.keys(settings).length === 0) return;
 
       if (settings.connection) {
+        // Advanced Settings Modal
         if (settings.connection.type) {
           const typeSelect = document.getElementById('set-conn-type');
           if (typeSelect) {
             typeSelect.value = settings.connection.type;
             typeSelect.dispatchEvent(new Event('change'));
           }
+          const mainTypeSelect = document.getElementById('main-conn-type');
+          if (mainTypeSelect) {
+            mainTypeSelect.value = settings.connection.type;
+            mainTypeSelect.dispatchEvent(new Event('change'));
+          }
         }
         if (settings.connection.tcp) {
           if (document.getElementById('set-ip')) document.getElementById('set-ip').value = settings.connection.tcp.ip || '';
           if (document.getElementById('set-port')) document.getElementById('set-port').value = settings.connection.tcp.port || '';
-          
-          if (settings.connection.type === 'tcp') {
-            if (document.getElementById('disp-address')) document.getElementById('disp-address').textContent = settings.connection.tcp.ip || '...';
-            if (document.getElementById('disp-port')) document.getElementById('disp-port').textContent = settings.connection.tcp.port || '...';
-          }
+          if (document.getElementById('main-ip')) document.getElementById('main-ip').value = settings.connection.tcp.ip || '192.168.1.100';
+          if (document.getElementById('main-port')) document.getElementById('main-port').value = settings.connection.tcp.port || '1234';
         }
         if (settings.connection.serial) {
           if (document.getElementById('set-com')) document.getElementById('set-com').value = settings.connection.serial.com || '';
@@ -169,9 +191,11 @@ class DMP41CalibrationApp {
           if (document.getElementById('set-data-bits')) document.getElementById('set-data-bits').value = settings.connection.serial.data_bits || '';
           if (document.getElementById('set-stop-bits')) document.getElementById('set-stop-bits').value = settings.connection.serial.stop_bits || '';
           
-          if (settings.connection.type === 'serial') {
-            if (document.getElementById('disp-address')) document.getElementById('disp-address').textContent = settings.connection.serial.com || '...';
-            if (document.getElementById('disp-port')) document.getElementById('disp-port').textContent = settings.connection.serial.baud || '...';
+          if (document.getElementById('main-com') && settings.connection.serial.com) {
+            document.getElementById('main-com').value = settings.connection.serial.com;
+          }
+          if (document.getElementById('main-baud')) {
+            document.getElementById('main-baud').value = settings.connection.serial.baud || '4800';
           }
         }
       }
@@ -295,12 +319,25 @@ class DMP41CalibrationApp {
     const connTypeSelect = document.getElementById('set-conn-type');
     if (connTypeSelect) {
       connTypeSelect.addEventListener('change', (e) => {
-        if (e.target.value === 'serial') {
+        if (e.target.value === 'usb') {
           document.getElementById('tcp-settings').style.display = 'none';
-          document.getElementById('serial-settings').style.display = 'block';
+          document.getElementById('serial-settings').style.display = 'flex';
         } else {
-          document.getElementById('tcp-settings').style.display = 'block';
+          document.getElementById('tcp-settings').style.display = 'flex';
           document.getElementById('serial-settings').style.display = 'none';
+        }
+      });
+    }
+
+    const mainConnTypeSelect = document.getElementById('main-conn-type');
+    if (mainConnTypeSelect) {
+      mainConnTypeSelect.addEventListener('change', (e) => {
+        if (e.target.value === 'usb') {
+          document.getElementById('main-tcp-settings').style.display = 'none';
+          document.getElementById('main-serial-settings').style.display = 'flex';
+        } else {
+          document.getElementById('main-tcp-settings').style.display = 'flex';
+          document.getElementById('main-serial-settings').style.display = 'none';
         }
       });
     }
@@ -737,8 +774,33 @@ class DMP41CalibrationApp {
     
     document.getElementById('conn-status').textContent = 'Connecting...';
     document.getElementById('conn-status').style.color = 'black';
+    
+    const uiConnType = document.getElementById('main-conn-type')?.value || 'lan';
+    // Map UI 'lan' to backend 'tcp', and UI 'usb' to backend 'serial'
+    const payloadType = uiConnType === 'lan' ? 'tcp' : 'serial';
+    const payload = { type: payloadType };
+    
+    if (payloadType === 'tcp') {
+      payload.tcp = {
+        ip: document.getElementById('main-ip')?.value || '192.168.1.100',
+        port: document.getElementById('main-port')?.value || '1234'
+      };
+    } else {
+      payload.serial = {
+        com: document.getElementById('main-com')?.value || 'COM1',
+        baud: document.getElementById('main-baud')?.value || '4800',
+        parity: 'none',
+        data_bits: 8,
+        stop_bits: 1
+      };
+    }
+
     try {
-      const res = await fetch('/api/hardware/connect', { method: 'POST' });
+      const res = await fetch('/api/hardware/connect', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
       await res.json();
     } catch (err) {
       console.error(err);

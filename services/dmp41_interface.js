@@ -1,17 +1,30 @@
 const net = require('net');
+let SerialPort = null;
+let ReadlineParser = null;
+try {
+  const serialport = require('serialport');
+  SerialPort = serialport.SerialPort;
+  ReadlineParser = serialport.ReadlineParser;
+} catch (e) {
+  console.warn('serialport module not fully available. USB/Serial connection may not work.');
+}
 
 class DMP41Interface {
   constructor(host = '192.168.1.100', port = 1234) {
+    this.connectionType = 'tcp'; // 'tcp' or 'serial'
+    this.serialConfig = { com: 'COM1', baud: 4800, parity: 'none', data_bits: 8, stop_bits: 1 };
+    
     this.host = host;
     this.port = port;
     this.socket = null;
+    this.serialPort = null;
     this.connectionState = 'disconnected'; // 'disconnected', 'standby', 'connected'
     this.demoMode = process.env.DMP41_DEMO_MODE === 'true';
     this.currentChannel = 1;
     this.readingBuffer = [];
     this.bufferSize = 10;
     
-    // Command queuing to prevent race conditions on the TCP socket
+    // Command queuing to prevent race conditions on the TCP/Serial socket
     this.commandQueue = [];
     this.isProcessingQueue = false;
     this.dataBuffer = '';
@@ -45,32 +58,16 @@ class DMP41Interface {
 
       if (this.socket) {
         this.socket.destroy();
+        this.socket = null;
+      }
+      
+      if (this.serialPort && this.serialPort.isOpen) {
+         this.serialPort.close();
+         this.serialPort = null;
       }
 
-      console.log(`Attempting real connection to DMP41 at ${this.host}:${this.port}...`);
-      this.socket = net.createConnection({ 
-        host: this.host, 
-        port: this.port
-      });
-
-      // Connection timeout logic
-      const connectTimeout = setTimeout(() => {
-        if (this.connectionState !== 'connected') {
-          console.log(`Connection timeout to real DMP41 at ${this.host}:${this.port}`);
-          this.connectionState = 'standby';
-          if (this.socket) this.socket.destroy();
-          reject(new Error('Connection timeout'));
-        }
-      }, 5000);
-
-      this.socket.on('connect', async () => {
-        clearTimeout(connectTimeout);
+      const onConnectSuccess = async () => {
         this.connectionState = 'connected';
-        console.log(`Successfully connected to real DMP41 at ${this.host}:${this.port}`);
-        
-        // Enable TCP Keep-Alive to keep the connection open over long periods of inactivity
-        this.socket.setKeepAlive(true, 10000);
-
         try {
           // Enforce output format (COF0) and acknowledgement behavior (SRB1) for robustness
           await this.sendCommand('COF0');
@@ -78,34 +75,26 @@ class DMP41Interface {
           
           // Ensure channel is selected on connect
           await this.selectChannel(this.currentChannel);
+          resolve();
         } catch (e) {
-          console.error('Initial configuration failed', e);
+          console.error('Initial configuration failed, device not responding:', e);
+          this.connectionState = 'standby';
+          if (this.socket) { this.socket.destroy(); this.socket = null; }
+          if (this.serialPort && this.serialPort.isOpen) { this.serialPort.close(); this.serialPort = null; }
+          reject(new Error('Connected to port, but DMP41 did not respond. Check cable or baud rate.'));
         }
-        
-        resolve();
-      });
+      };
 
-      this.socket.on('error', (err) => {
-        clearTimeout(connectTimeout);
-        console.log(`Failed to connect to real DMP41 at ${this.host}:${this.port} - ${err.message}`);
-        this.connectionState = 'standby';
-        reject(err);
-      });
-
-      this.socket.on('end', () => {
-        console.log('DMP41 closed the connection');
-        this.connectionState = 'disconnected';
-      });
-      
-      // Setup persistent data handler for the queue with buffering
-      this.socket.on('data', (data) => {
+      const processReceivedData = (data) => {
         this.dataBuffer += data.toString('ascii');
-        
-        // Process complete responses separated by \r\n
-        let newlineIndex;
-        while ((newlineIndex = this.dataBuffer.indexOf('\r\n')) !== -1) {
+        let match;
+        while ((match = this.dataBuffer.match(/\r\n|\n|\r/))) {
+          const newlineIndex = match.index;
+          const matchLength = match[0].length;
           const response = this.dataBuffer.substring(0, newlineIndex).trim();
-          this.dataBuffer = this.dataBuffer.substring(newlineIndex + 2);
+          this.dataBuffer = this.dataBuffer.substring(newlineIndex + matchLength);
+          
+          if (response === '') continue; // Ignore empty lines from trailing CRs
           
           if (this.currentPendingCommand) {
             this.currentPendingCommand.resolve(response);
@@ -115,7 +104,90 @@ class DMP41Interface {
              console.warn('Received unexpected data from DMP41:', response);
           }
         }
-      });
+      };
+
+      if (this.connectionType === 'serial') {
+        if (!SerialPort) {
+           return reject(new Error('SerialPort module is not installed or available.'));
+        }
+        console.log(`Attempting real connection to DMP41 via Serial Port ${this.serialConfig.com}...`);
+        
+        let parity = 'none';
+        if (this.serialConfig.parity) {
+            parity = this.serialConfig.parity.toLowerCase();
+        }
+        
+        this.serialPort = new SerialPort({
+           path: this.serialConfig.com,
+           baudRate: parseInt(this.serialConfig.baud) || 4800,
+           parity: parity,
+           dataBits: parseInt(this.serialConfig.data_bits) || 8,
+           stopBits: parseInt(this.serialConfig.stop_bits) || 1
+        }, (err) => {
+           if (err) {
+             console.log(`Failed to connect to Serial DMP41 on ${this.serialConfig.com} - ${err.message}`);
+             this.connectionState = 'standby';
+             reject(err);
+           }
+        });
+
+        this.serialPort.on('open', () => {
+           console.log(`Successfully connected to real DMP41 via Serial Port ${this.serialConfig.com}`);
+           onConnectSuccess();
+        });
+
+        this.serialPort.on('error', (err) => {
+           console.log(`Serial connection error: ${err.message}`);
+           this.connectionState = 'standby';
+        });
+
+        this.serialPort.on('close', () => {
+           console.log('DMP41 closed the serial connection');
+           this.connectionState = 'disconnected';
+        });
+
+        this.serialPort.on('data', processReceivedData);
+        
+      } else {
+        // TCP Connection
+        console.log(`Attempting real connection to DMP41 at ${this.host}:${this.port}...`);
+        this.socket = net.createConnection({ 
+          host: this.host, 
+          port: this.port
+        });
+
+        // Connection timeout logic
+        const connectTimeout = setTimeout(() => {
+          if (this.connectionState !== 'connected') {
+            console.log(`Connection timeout to real DMP41 at ${this.host}:${this.port}`);
+            this.connectionState = 'standby';
+            if (this.socket) this.socket.destroy();
+            reject(new Error('Connection timeout'));
+          }
+        }, 5000);
+
+        this.socket.on('connect', () => {
+          clearTimeout(connectTimeout);
+          console.log(`Successfully connected to real DMP41 at ${this.host}:${this.port}`);
+          // Enable TCP Keep-Alive to keep the connection open over long periods of inactivity
+          this.socket.setKeepAlive(true, 10000);
+          onConnectSuccess();
+        });
+
+        this.socket.on('error', (err) => {
+          clearTimeout(connectTimeout);
+          console.log(`Failed to connect to real DMP41 at ${this.host}:${this.port} - ${err.message}`);
+          this.connectionState = 'standby';
+          reject(err);
+        });
+
+        this.socket.on('end', () => {
+          console.log('DMP41 closed the TCP connection');
+          this.connectionState = 'disconnected';
+        });
+        
+        this.socket.on('data', processReceivedData);
+      }
     });
   }
 
@@ -125,7 +197,14 @@ class DMP41Interface {
       this.connectionState = 'connected'; 
     } else {
       this.connectionState = 'disconnected';
-      if (this.socket) this.socket.destroy();
+      if (this.socket) {
+         this.socket.destroy();
+         this.socket = null;
+      }
+      if (this.serialPort && this.serialPort.isOpen) {
+         this.serialPort.close();
+         this.serialPort = null;
+      }
     }
     return this.demoMode;
   }
@@ -180,7 +259,13 @@ class DMP41Interface {
     };
 
     try {
-      this.socket.write(fullCmd);
+      if (this.connectionType === 'serial' && this.serialPort && this.serialPort.isOpen) {
+         this.serialPort.write(fullCmd);
+      } else if (this.connectionType === 'tcp' && this.socket) {
+         this.socket.write(fullCmd);
+      } else {
+         throw new Error("No active connection to write to.");
+      }
     } catch (err) {
       pending.reject(err);
       this.currentPendingCommand = null;
