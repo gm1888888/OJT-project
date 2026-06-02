@@ -477,6 +477,45 @@ tbody tr:nth-child(even) {
   gap: 15px;
 }
 
+/* Specific styling for the Manage Standard Modal Grid */
+#modal-standard .modal-body-grid {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+#modal-standard .form-group label {
+  color: var(--secondary-color);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+}
+
+#modal-standard .form-group input {
+  padding: 10px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 6px;
+  width: 100%;
+  transition: border-color 0.2s;
+}
+
+#modal-standard .form-group input:focus {
+  border-color: var(--primary-color);
+  outline: none;
+}
+
+/* Triple-column layout for coefficients row if space allows */
+.coeff-row {
+  grid-column: span 2;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  background: #f8fafc;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #edf2f7;
+}
+
 .modal-body-grid .form-group {
   margin-bottom: 0;
 }

@@ -308,21 +308,45 @@ class DMP41CalibrationApp {
   async saveStandard() {
     const dbId = document.getElementById('std-db-id').value;
     const payload = {
-        model: document.getElementById('std-model').value, sn: document.getElementById('std-sn').value,
-        capacity_kn: parseFloat(document.getElementById('std-cap').value), uncertainty: parseFloat(document.getElementById('std-u').value),
-        coeff_a: parseFloat(document.getElementById('std-coeff-a').value), coeff_b: parseFloat(document.getElementById('std-coeff-b').value),
-        coeff_c: parseFloat(document.getElementById('std-coeff-c').value), cert_no: document.getElementById('std-cert').value, cal_date: document.getElementById('std-date').value
+        model: document.getElementById('std-model').value.trim(), 
+        sn: document.getElementById('std-sn').value.trim(),
+        capacity_kn: parseFloat(document.getElementById('std-cap').value), 
+        uncertainty: parseFloat(document.getElementById('std-u').value),
+        coeff_a: parseFloat(document.getElementById('std-coeff-a').value), 
+        coeff_b: parseFloat(document.getElementById('std-coeff-b').value),
+        coeff_c: parseFloat(document.getElementById('std-coeff-c').value), 
+        cert_no: document.getElementById('std-cert').value.trim(), 
+        cal_date: document.getElementById('std-date').value
     };
 
-    if (!payload.model || !payload.sn) { alert("Model and Serial Number are required."); return; }
-    if (isNaN(payload.capacity_kn) || payload.capacity_kn <= 0) { alert("Capacity must be a positive number."); return; }
-    if (isNaN(payload.coeff_a) || isNaN(payload.coeff_b) || isNaN(payload.coeff_c)) { alert("Polynomial coefficients (A, B, C) must be valid numbers."); return; }
-    if (isNaN(payload.uncertainty)) { alert("Uncertainty must be a valid number."); return; }
+    // --- DEEPER VALIDATION ---
+    const errors = [];
+    if (!payload.model) errors.push("Model name is required.");
+    if (!payload.sn) errors.push("Serial Number is required.");
+    if (isNaN(payload.capacity_kn) || payload.capacity_kn <= 0) errors.push("Capacity must be a positive number.");
+    
+    // Check for NaN or extremely unrealistic coefficients (safety check)
+    if (isNaN(payload.coeff_a)) errors.push("Coefficient A is invalid.");
+    if (isNaN(payload.coeff_b)) errors.push("Coefficient B is invalid.");
+    if (isNaN(payload.coeff_c)) errors.push("Coefficient C is invalid.");
+    
+    // ISO 376 coefficients are typically small or within predictable ranges
+    // but we primarily want to ensure they are present and numeric.
+    if (isNaN(payload.uncertainty) || payload.uncertainty < 0) errors.push("Uncertainty must be a non-negative number.");
+
+    if (errors.length > 0) {
+        alert("Validation Errors:\n- " + errors.join("\n- "));
+        return;
+    }
 
     try {
         const url = dbId ? `/api/config/load-cells/${dbId}` : '/api/config/load-cells';
         const method = dbId ? 'PUT' : 'POST';
-        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const res = await fetch(url, { 
+            method, 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(payload) 
+        });
         const result = await res.json();
         
         if (res.ok) { 

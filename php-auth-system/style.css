@@ -1,0 +1,219 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "poppins", sans-serif;
+}
+
+body {
+    background-color: wheat;
+    background: linear-gradient(to right, #99CC33, white, #001D53);
+}
+
+.container {
+    background-color: white;
+    width: 450px;
+    padding: 1.5rem;
+    margin: 50px auto;
+    border-radius: 10px;
+    box-shadow: 0 20px 35px black;
+}
+
+/* system header */
+.system-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #001D53; 
+    padding-bottom: 1.5rem;
+}
+
+.system-logo {
+    display: block;
+    width: 100%; 
+    max-height: 100px; 
+    object-fit: contain; 
+    margin: 0 auto 15px auto; 
+}
+
+/* DMP41 CALIBRATION SYSTEM*/
+.main-system-title {
+    font-size: 1.4rem; 
+    font-weight: 800;
+    color: #001D53;
+    line-height: 1.2;
+    margin: 0; 
+}
+
+
+.form-subtitle {
+    display: block;
+    width: 100%;
+    text-align: center !important; 
+    font-size: 1.4rem; 
+    font-weight: 800;  
+    color: #111;       
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+}
+
+form {
+    margin: 0 2rem;
+}
+
+/* --- Input Group & Icons --- */
+.input-group {
+    position: relative;
+    margin-bottom: 1.5rem; 
+}
+
+.input-group > i:first-child {
+    position: absolute;
+    color: black;
+    left: 0;
+    top: 10px; 
+}
+
+.toggle-password {
+    position: absolute;
+    right: 0;
+    top: 10px; 
+    cursor: pointer;
+    color: gray;
+    z-index: 10;
+}
+
+.toggle-password:hover {
+    color: black;
+}
+
+/* --- Input Fields --- */
+input {
+    color: inherit;
+    width: 100%;
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid black;
+    padding: 10px 30px; 
+    font-size: 15px;
+}
+
+input:focus {
+    background-color: transparent;
+    outline: transparent;
+    border-bottom: 2px solid black;
+}
+
+input::placeholder {
+    color: transparent;
+}
+
+/* email and password label*/
+label {
+    color: gray;
+    position: absolute; 
+    left: 30px; 
+    top: 10px;
+    cursor: auto;
+    transition: 0.3s ease all;
+    pointer-events: none; 
+}
+ 
+/*floating labels*/
+input:focus ~ label, 
+input:not(:placeholder-shown) ~ label {
+    top: -15px;
+    color:#001D53;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+/* --- Buttons & Links --- */
+.recover {
+    text-align: right;
+    font-size: 1rem;
+    margin-bottom: 1rem;
+}
+
+.recover a {
+    text-decoration: none;
+    color: #001D53;
+}
+
+.recover a:hover {
+    color: #99CC33;
+    text-decoration: underline;
+}
+
+.btn { 
+    font-size: 1.1rem;
+    padding: 8px 0;
+    border-radius: 5px;
+    outline: none;
+    border: none;
+    width: 100%;
+    background: #99CC33;
+    color: white;
+    cursor: pointer;
+    transition: 0.9s;
+}
+
+.btn:hover {
+    background: #001D53;
+}
+
+.or {
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
+    text-align: center;
+}
+
+.icons {
+    text-align: center;
+}
+
+.icons i {
+    color: black;
+    padding: 0.8rem 1.5rem;
+    border-radius: 10px;
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #ccc;
+    margin: 0 10px;
+    width: 70px;  
+    height: 50px;
+}
+
+.icons i:hover {
+    background: #99CC33;
+    font-size: 1.6rem;
+    opacity: 100%;
+    border: 2px solid #ccc;
+    color: white;
+}
+
+.links {
+    display: flex;
+    justify-content: space-around;
+    padding: 0 4rem;
+    margin-top: 0.9rem;
+    font-weight: bold;
+}
+
+/*sign up & log in button*/
+button {
+    color: #001D53;
+    border: none;
+    background-color: transparent;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+/*sign up & log in button*/
+button:hover {
+    text-decoration: underline;
+    color: #001D53;
+}

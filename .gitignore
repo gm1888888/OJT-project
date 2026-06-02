@@ -1,6 +1,9 @@
 # Dependency directories
 node_modules/
 jspm_packages/
+vendor/
+php-auth-system/vendor/
+php-auth-system/google-api/vendor/
 
 # Environment files
 .env
@@ -11,6 +14,7 @@ jspm_packages/
 # Database files
 *.db
 *.sqlite
+calibration_data.db
 
 # Logs
 logs
@@ -28,6 +32,7 @@ desktop.ini
 dist/
 build/
 reports/*.xls
+reports/*.xlsx
 reports/*.pdf
 
 # Python-specific

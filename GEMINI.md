@@ -11,7 +11,7 @@ This system features a unique **Hybrid Excel Engine** that combines a modern, re
 - **Frontend**: Vanilla HTML5, CSS3, and JavaScript (ES6+). Styled with a modern SaaS aesthetic (Inter font, soft shadows, rounded borders) while preserving the strict layout and monospace typography (`JetBrains Mono`) of legacy Excel tables for industrial readability.
 - **Backend**: **Node.js** with **Express.js**. Features a centralized API for hardware communication, database management, and Excel integration.
 - **Hardware Interface**: Native `net` module for ASCII protocol over TCP/IP (Port 1234). Features a command-queuing system to prevent socket race conditions.
-- **Excel Bridge**: A **Python-based adapter** (`excel_bridge.py`) that uses `xlutils` to safely "hydrate" legacy binary `.xls` files without breaking original formulas or macros. Features dynamic cell targeting, text alignment formatting, and gridline enforcement.
+- **Excel Bridge**: A **Python-based adapter** (`excel_bridge.py`) that uses `xlwings` to safely "hydrate" legacy binary `.xls` files without breaking original formulas or macros. Features dynamic cell targeting, text alignment formatting, and gridline enforcement.
 - **Database**: **SQLite** (via `node:sqlite`) for robust, local storage of projects, measurement snapshots, and archival history.
 
 ---
@@ -47,11 +47,12 @@ This system features a unique **Hybrid Excel Engine** that combines a modern, re
 ## Setup & Deployment
 
 ### Automated Management Script
-The project includes a robust `manage_server.bat` file designed for a "one-click" setup experience:
+The project includes a robust `Start_System.bat` file designed for a "one-click" setup experience:
 1. **Dependency Check**: Verifies Node.js and Python installations.
 2. **Automated Install**: Uses the Windows Package Manager (`winget`) to download and install missing software directly in the terminal.
 3. **Library Sync**: Automatically runs `npm install` and `pip install` for all required JS and Python components.
 4. **Process Management**: Automatically cleans up hanging ports and starts the server in the current window with a persistent restart/exit menu.
+5. **Portability**: Supports custom XAMPP installation paths via `.env` variable `XAMPP_ROOT`.
 
 ---
 
@@ -69,8 +70,9 @@ The project includes a robust `manage_server.bat` file designed for a "one-click
 
 ---
 
-## Pending Implementation (Token Limit/Next Steps)
-- [ ] **Export Metadata Mapping**: Verify Cert No. and Calibration Date from custom standards in `excel_bridge.py`.
-- [ ] **Input Sanitization**: Add deeper validation for polynomial coefficients in the modal.
-- [ ] **CSS Refinement**: Polish the grid layout for the "Manage Standard" modal.
-- [ ] **Duplicate Prevention**: Implement backend checks for unique serial numbers.
+## Final Verification Status
+- [x] **Export Metadata Mapping**: Cert No. and Calibration Date from custom standards are verified in `excel_bridge.py`.
+- [x] **Duplicate Prevention**: Backend checks for unique serial numbers implemented in `server.js`.
+- [x] **Portability Audit**: `Start_System.bat` updated to support dynamic XAMPP paths.
+- [x] **Input Sanitization**: Enhanced validation for polynomial coefficients in the modal.
+- [x] **CSS Refinement**: Polished grid layout for the "Manage Standard" modal.

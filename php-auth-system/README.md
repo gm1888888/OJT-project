@@ -1,0 +1,1 @@
+A PHP-based authentication and account management system developed for the DMP41 Calibration System project. This web application includes user registration, login, Google OAuth authentication, password recovery via email, and session-based access control.

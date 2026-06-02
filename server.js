@@ -4,6 +4,8 @@ const { DatabaseSync } = require('node:sqlite');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const session = require('express-session');
+const authMiddleware = require('./authMiddleware');
 const DMP41Interface = require('./services/dmp41_interface');
 const CalibrationEngine = require('./services/calibration_engine');
 const ExcelEngine = require('./services/excel_engine');
@@ -12,9 +14,24 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SETTINGS_FILE = path.join(__dirname, 'config', 'dmp41_settings.json');
 
+// Session Configuration
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'dmp41-offline-secret-key-12345',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { 
+        secure: false, // Set to true if using HTTPS in production
+        maxAge: 1000 * 60 * 60 * 24 // 24 hours
+    }
+}));
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Apply Auth Bridge Gatekeeper before serving static files or APIs
+app.use(authMiddleware);
+
 app.use(express.static('public'));
 
 // Initialize services
