@@ -19,11 +19,13 @@ if %ERRORLEVEL% NEQ 0 (
 
 :: Logging Setup
 if not exist "logs" mkdir "logs"
-set "LOG_FILE=logs\system_%date:~-4,4%%date:~-10,2%%date:~-7,2%.log"
+:: Robust locale-independent date stamp via PowerShell
+for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd'"`) do set "STAMP=%%i"
+set "LOG_FILE=logs\system_%STAMP%.log"
 
 :: Load .env variables (Simple parser)
-if exist .env (
-    for /f "tokens=1,2 delims==" %%a in (.env) do (
+if exist ".env" (
+    for /f "usebackq tokens=1,2 delims==" %%a in (".env") do (
         set "%%a=%%b"
     )
 )
@@ -115,7 +117,7 @@ if not exist .env (
 ping -n 1 google.com >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo       - WARNING: No internet connection detected. 
-    echo       - Dependency installation (npm/pip) may fail if packages are not cached.
+    echo       - Dependency installation ^(npm/pip^) may fail if packages are not cached.
 )
 
 :: Node.js Detection & Install
