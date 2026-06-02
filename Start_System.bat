@@ -66,8 +66,10 @@ goto MENU
 
 :START_SYSTEM
 cls
+echo DEBUG: Entering START_SYSTEM block
 echo [1/5] Checking Database and PHP Environment...
 :: 1. CHECK AND INSTALL XAMPP (Silent)
+echo DEBUG: Checking XAMPP at %XAMPP_ROOT%
 IF NOT EXIST "%XAMPP_ROOT%\htdocs" (
     echo       - XAMPP not found at %XAMPP_ROOT%.
     echo       - Attempting automated installation via winget...
@@ -81,6 +83,7 @@ IF NOT EXIST "%XAMPP_ROOT%\htdocs" (
 )
 
 :: 2. START APACHE & MYSQL (Background)
+echo DEBUG: Starting Apache/MySQL
 echo       - Starting Apache and MySQL...
 
 :: Check if Port 80 is already in use (Common conflict)
@@ -99,14 +102,18 @@ if exist "%XAMPP_ROOT%\xampp_start.exe" (
 )
 
 :: 3. DEPLOY PHP CODE
+echo DEBUG: Syncing PHP code
 echo       - Syncing Authentication Portal to htdocs...
 xcopy /E /I /Y "php-auth-system" "%XAMPP_ROOT%\htdocs\php-auth-system" >nul 2>&1
 
 :: 4. CHECK NODE/PYTHON/XLWINGS
+echo DEBUG: Entering Step 2 (Dependencies)
 echo [2/5] Verifying Node.js, Python, and xlwings...
 
 :: Ensure .env exists
+echo DEBUG: Checking for .env
 if not exist .env (
+    echo DEBUG: .env missing, checking .env.example
     if exist .env.example (
         echo       - .env file missing. Creating from .env.example...
         copy .env.example .env >nul
@@ -114,15 +121,21 @@ if not exist .env (
 )
 
 :: Internet Connectivity Check (Quick Ping)
+echo DEBUG: Checking internet connectivity
 ping -n 1 google.com >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
+echo DEBUG: Ping ERRORLEVEL is %ERRORLEVEL%
+if "%ERRORLEVEL%" NEQ "0" (
+    echo DEBUG: Entering no-internet block
     echo       - WARNING: No internet connection detected. 
-    echo       - Dependency installation ^(npm/pip^) may fail if packages are not cached.
+    echo       - Dependency installation [npm/pip] may fail if packages are not cached.
 )
 
 :: Node.js Detection & Install
+echo DEBUG: Detecting Node.js
 node -v >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
+echo DEBUG: node -v ERRORLEVEL is %ERRORLEVEL%
+if "%ERRORLEVEL%" NEQ "0" (
+    echo DEBUG: Node.js missing, attempting install
     echo       - Node.js missing. Installing...
     winget install OpenJS.NodeJS.LTS --accept-package-agreements >> "%LOG_FILE%" 2>&1
     echo       - IMPORTANT: Node.js was just installed. 
@@ -130,18 +143,23 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 :: Python Detection & Install
+echo DEBUG: Detecting Python
 set "PYTHON_CMD=python"
 set "PIP_CMD=pip"
 
 python --version >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
+echo DEBUG: python --version ERRORLEVEL is %ERRORLEVEL%
+if "%ERRORLEVEL%" NEQ "0" (
+    echo DEBUG: python command failed, checking py launcher
     echo       - Python 'python' command not found. Checking for 'py' launcher...
     py --version >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
+    if "%ERRORLEVEL%" EQU "0" (
+        echo DEBUG: Found py launcher
         echo       - Found Python Launcher (py).
         set "PYTHON_CMD=py"
         set "PIP_CMD=py -m pip"
     ) else (
+        echo DEBUG: py launcher failed, attempting winget install
         echo       - Python missing. Attempting installation via winget...
         winget install Python.Python.3.12 --accept-package-agreements >> "%LOG_FILE%" 2>&1
         echo       - IMPORTANT: Python was just installed. 
@@ -149,7 +167,7 @@ if %ERRORLEVEL% NEQ 0 (
         
         :: Try one last time to see if it became available (sometimes works)
         python --version >nul 2>&1
-        if %ERRORLEVEL% NEQ 0 (
+        if "%ERRORLEVEL%" NEQ "0" (
             echo       - ERROR: Python installed but not found in PATH.
             echo       - Please restart your terminal or computer and run this script again.
             pause
@@ -157,19 +175,25 @@ if %ERRORLEVEL% NEQ 0 (
         )
     )
 )
+echo DEBUG: Using PYTHON_CMD=%PYTHON_CMD%
+echo DEBUG: Using PIP_CMD=%PIP_CMD%
 
 :: Check xlwings (Critical for Excel Engine)
+echo DEBUG: Checking xlwings
 %PYTHON_CMD% -c "import xlwings" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
+echo DEBUG: xlwings check ERRORLEVEL is %ERRORLEVEL%
+if "%ERRORLEVEL%" NEQ "0" (
+    echo DEBUG: xlwings missing, attempting pip install
     echo       - Installing required Python packages [xlwings]...
     if exist "logs\pip_install.log" del "logs\pip_install.log"
     
     :: Use -m pip for maximum reliability
+    echo DEBUG: Executing %PIP_CMD% install xlwings
     %PIP_CMD% install xlwings > logs\pip_install.log 2>&1
     
     :: Verify installation
     %PYTHON_CMD% -c "import xlwings" >nul 2>&1
-    if %ERRORLEVEL% NEQ 0 (
+    if "%ERRORLEVEL%" NEQ "0" (
         echo       - ERROR: Failed to install xlwings.
         echo       - SURFACING PIP ERROR LOG (logs\pip_install.log):
         echo ---------------------------------------------------
@@ -191,7 +215,9 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 :: Ensure node_modules exists
+echo DEBUG: Checking node_modules
 if not exist node_modules (
+    echo DEBUG: node_modules missing, attempting npm install
     echo       - Installing Node.js dependencies...
     if exist "logs\npm_install.log" del "logs\npm_install.log"
     call npm install > logs\npm_install.log 2>&1
