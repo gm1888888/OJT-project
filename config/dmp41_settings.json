@@ -1,17 +1,9 @@
 {
   "connection": {
     "tcp": {
-      "ip": "192.168.0.150",
+      "ip": "192.168.1.100",
       "port": "1234"
     }
   },
-  "instrument": "DMP41",
-  "channel": "2",
-  "coeff_a": "4.902632",
-  "coeff_b": "-0.0009307508",
-  "coeff_c": "-0.00006355071",
-  "ref_unc": "0.011",
-  "sensitivity_ppm": "50",
-  "resolution_kgf": "0.01",
-  "stability_threshold": "0.000010"
+  "channel": "1"
 }

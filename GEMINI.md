@@ -1,4 +1,4 @@
-# GEMINI.md - DMP41 Calibration System (V2.0 - Hybrid Excel Engine)
+# GEMINI.md - DMP41 Calibration System (V2.1 - Hybrid Excel Engine)
 
 ## Project Overview
 The **DMP41 Calibration System** is a professional, web-based platform designed to replace legacy Excel and LabWindows systems for high-precision force measurement calibrations. It interfaces with the **HBM DMP41 precision amplifier** via TCP/IP over LAN to perform ISO 376 and ISO 7500-1 compliant calibrations.
@@ -11,7 +11,7 @@ This system features a unique **Hybrid Excel Engine** that combines a modern, re
 - **Frontend**: Vanilla HTML5, CSS3, and JavaScript (ES6+). Styled with a modern SaaS aesthetic (Inter font, soft shadows, rounded borders) while preserving the strict layout and monospace typography (`JetBrains Mono`) of legacy Excel tables for industrial readability.
 - **Backend**: **Node.js** with **Express.js**. Features a centralized API for hardware communication, database management, and Excel integration.
 - **Hardware Interface**: Native `net` module for ASCII protocol over TCP/IP (Port 1234). Features a command-queuing system to prevent socket race conditions.
-- **Excel Bridge**: A **Python-based adapter** (`excel_bridge.py`) that uses `xlutils` to safely "hydrate" legacy binary `.xls` files without breaking original formulas or macros.
+- **Excel Bridge**: A **Python-based adapter** (`excel_bridge.py`) that uses `xlutils` to safely "hydrate" legacy binary `.xls` files without breaking original formulas or macros. Features dynamic cell targeting, text alignment formatting, and gridline enforcement.
 - **Database**: **SQLite** (via `node:sqlite`) for robust, local storage of projects, measurement snapshots, and archival history.
 
 ---
@@ -23,29 +23,24 @@ This system features a unique **Hybrid Excel Engine** that combines a modern, re
 - **Hardware Terminal**: A built-in command-line interface for direct DMP41 interaction, featuring Regex-based command validation to ensure safe hardware operations.
 
 ### 2. Reactive Calculation Engine
-- **Global Recalculations**: Every input (sensor coefficients, units, readings, temperature) triggers instant, global updates across all 9 tables without page reloads.
-- **Dynamic Table Expansion**: Support for custom calibration protocols via "+ Add Test Point" buttons for both Pre-Loading and Measured Data tables.
+- **Global Recalculations**: Every input (sensor coefficients, units, readings, temperature) triggers instant, global updates across all tables without page reloads.
+- **Dynamic Table Expansion**: Support for custom calibration protocols via "+ Add Test Point" and "- Delete Test Point" buttons. Safety locks prevent the deletion of baseline or maximum capacity points to maintain mathematical stability.
 
 ### 3. Comprehensive Data Lifecycle
-- **Historical Snapshots**: Unlike simple logging, the system saves a **complete physical and mathematical snapshot** (including transducer coefficients, environmental conditions, and raw readings) to ensure historical records are independent and audit-ready.
+- **Historical Snapshots**: Saves a **complete physical and mathematical snapshot** (including transducer coefficients, environmental conditions, and raw readings) to ensure historical records are independent and audit-ready.
+- **Load Demo Data**: Users can load historical calibration records directly into the live workspace as a starting template or for demonstration purposes.
 - **Non-Destructive Archival**: A specialized "Archive" system replaces permanent deletion. Records can be moved to a minimalist Archive view to keep the workspace clean while remaining fully recoverable.
-- **Safety Confirmation Layer**: Mandatory prompts for high-impact actions:
-    - **Saving**: Confirms before overwriting or finalizing a record.
-    - **Archiving**: Confirms before moving data out of active history.
-    - **Exporting**: Confirms before generating Excel, CSV, or Certificates.
+- **Safety Confirmation Layer**: Mandatory prompts for high-impact actions (Saving, Archiving, Exporting).
 
 ### 4. Advanced Reporting
-- **Hybrid Export**: Populates data directly into the original legacy `.xls` template, maintaining 100% visual parity.
+- **Hybrid Export**: Populates data directly into the original legacy `.xls` template (`Testing Machine Software_revised (1).xls`), maintaining 100% visual parity with original reports.
 - **Multi-Format Support**: One-click generation of ISO-compliant Certificates (HTML/PDF), CSV data exports, and formatted Print views.
 
----
-
-## UI/UX Workflow
-1. **Project Description (Table 1)**: Metadata entry (Client, Instrument, Serial Number).
-2. **Hardware & Transducer (Table 4)**: Configure connection parameters or select/edit load cell coefficients. Table 4 supports direct manual overrides for custom setups.
-3. **Environmental Capture (Table 5)**: Track Temperature and Humidity before and after the session.
-4. **Live Capturing (Tables 2-3)**: Monitor stability and capture readings directly to selected cells.
-5. **Analysis & Classification (Tables 6-9)**: Real-time calculation of Net Values, Polynomial Estimation, and ISO 376 Uncertainty components.
+### 5. Custom Load Cell Standards (New in V2.1)
+- **Persistent CRUD**: Integrated `load_cells_reference` SQLite table with the frontend. Users can now Create, Read, Update, and Delete custom standards without touching source code.
+- **Hybrid Source API**: Merges predefined standards from `config/load_cells.json` with user-defined standards from the database, distinguishing them via `is_system` flags.
+- **Categorized UI**: Custom standards are grouped under "User Defined Standards" in the dropdown.
+- **Auto-Injection**: Selecting a standard automatically hydrates the Live Sheet calculation engine and reporting metadata (Table 4).
 
 ---
 
@@ -64,9 +59,18 @@ The project includes a robust `manage_server.bat` file designed for a "one-click
 
 ### Mathematical Logic
 - **Unified Engine**: The `calculateFullSuite()` method handles all logic for both live and historical views to guarantee mathematical parity.
-- **Uncertainty RSS**: Relative Standard Uncertainty components ($w_{rep}$, $w_{res}$, $w_{std}$) are calculated using the Root-Sum-Square approach as per ISO 376.
-- **Classification**: ISO 376 Class (0, 1, 2, 3) is determined by the Expanded Uncertainty ($W_{exp}$) thresholds.
+- **Tare Logic**: The system uses the raw reading at the `0.0` test point in the Measured Data table as the absolute zero/tare reference.
+- **Interpolation**: Linear interpolation is applied exactly as in the legacy system: `Interpolated Deflection = (Net Deflection / Indicated Force) * Target Force`.
+- **Uncertainty Parity**: $w_{rep}$ is calculated from interpolated forces, and $w_{res}$ follows a rectangular distribution against the true reference force.
 
 ### Technical Integrity
-- **Read-Only History**: Historical views utilize a `prefix` rendering mode that disables all inputs, preventing accidental modification of finalized records.
-- **Database Migrations**: `server.js` contains automatic schema update logic to handle new feature deployments without manual DB intervention.
+- **Read-Only History**: Historical views utilize a `prefix` rendering mode that disables all inputs.
+- **Database Migrations**: `server.js` contains automatic schema update logic for new feature deployments.
+
+---
+
+## Pending Implementation (Token Limit/Next Steps)
+- [ ] **Export Metadata Mapping**: Verify Cert No. and Calibration Date from custom standards in `excel_bridge.py`.
+- [ ] **Input Sanitization**: Add deeper validation for polynomial coefficients in the modal.
+- [ ] **CSS Refinement**: Polish the grid layout for the "Manage Standard" modal.
+- [ ] **Duplicate Prevention**: Implement backend checks for unique serial numbers.

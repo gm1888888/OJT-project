@@ -1,14 +1,14 @@
 class DMP41CalibrationApp {
   constructor() {
     this.currentProject = null;
-    this.currentHistoricalData = null; // Store data for history view
+    this.currentHistoricalData = null; 
     this.currentReadings = [];
     this.isPolling = false;
     this.calibrationSequence = [];
     this.pollInterval = null;
     this.chart = null;
-    this.lastResults = []; // Cache for CSV export
-    this.selectedCell = null; // For native data logger
+    this.lastResults = []; 
+    this.selectedCell = null; 
     this.loadCells = [];
     this.currentUnit = 'kgf';
     this.demoMode = false;
@@ -16,19 +16,20 @@ class DMP41CalibrationApp {
       'kgf': 0.00980665,
       'kN': 1.0,
       'lbf': 0.004448222,
-      'N': 0.001
+      'N': 0.001,
+      'tf': 9.80665
     };
     this.loggerData = {
       preloading: [
-        { target: 0, runs: [{ m: 0, r: 0 }, { m: 0, r: 0 }, { m: 0, r: 0 }] },
-        { target: 100, runs: [{ m: 0, r: 0 }, { m: 0, r: 0 }, { m: 0, r: 0 }] }
+        { target: 0, runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }] },
+        { target: 100, runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }] }
       ],
       measured: Array.from({ length: 11 }, (_, i) => ({
         point: i,
         target: i * 10,
-        runs: [{ m: 0, r: 0 }, { m: 0, r: 0 }, { m: 0, r: 0 }],
+        runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }],
         mean: 0,
-        meanForce: 0, // In Selected Unit
+        meanForce: 0, 
         uncertainty: 0,
         class: 'N/A'
       }))
@@ -36,53 +37,44 @@ class DMP41CalibrationApp {
     
     this.initEventListeners();
     this.initChart();
-    this.checkHardwareStatus(); // Initial check
+    this.checkHardwareStatus(); 
     this.loadSettings();
-    
-    // Setup blank workspace on load
     this.resetWorkspace();
 
-    // Aggressive UI state enforcer to prevent any desync
     setInterval(() => this.enforceUIState(), 500);
-    // Continuously monitor actual hardware connection state to auto-sync UI
     setInterval(() => this.checkHardwareStatus(), 2000);
   }
 
   resetWorkspace() {
     this.currentProject = null;
     this.demoMode = false;
-    
-    // Clear Table 1 Inputs
-    ['t1-date', 't1-ref-no', 't1-capacity', 't1-item', 't1-range', 't1-make', 't1-increment', 't1-sn', 't1-resolution'].forEach(id => {
+    ['t1-date', 't1-ref-no', 't1-capacity', 't1-item', 't1-range', 't1-increment', 't1-resolution', 't1-lc-make', 't1-lc-sn', 't1-ind-make', 't1-ind-sn', 't1-client-name', 't1-client-address'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
-    
-    // Clear Table 5 Inputs
     ['t5-temp-b', 't5-temp-a', 't5-hum-b', 't5-hum-a'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
-
-    // Clear Table 4 Inputs
-    ['t4-model', 't4-cap', 't4-sn', 't4-cert', 't4-date', 't4-a', 't4-b', 't4-c', 't4-u'].forEach(id => {
+    ['t4-model', 't4-cap', 't4-sn', 't4-cert', 't4-date', 't4-a', 't4-b', 't4-c', 't4-u', 't4-drift'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
-
-    // Clear Logger Data internally
-    this.loggerData.preloading.forEach(r => r.runs.forEach(run => { run.m = 0; run.r = 0; }));
+    this.loggerData.preloading.forEach(r => r.runs.forEach(run => { run.m = null; run.r = null; }));
     this.loggerData.measured.forEach(r => {
       r.target = 0;
-      r.runs.forEach(run => { run.m = 0; run.r = 0; });
+      r.runs.forEach(run => { run.m = null; run.r = null; });
       r.mean = 0; r.uncertainty = 0; r.class = 'N/A';
     });
-    
     this.renderLogger();
-    
-    // Force the "New Project" modal to show on startup
-    const modalNewProject = document.getElementById('modal-new-project');
-    if (modalNewProject) modalNewProject.style.display = 'block';
+  }
+
+  async clearLoggerData() {
+    if (confirm("Reset all worksheet data and project information? This will start a fresh workspace.")) {
+      this.resetWorkspace();
+      const modalNewProject = document.getElementById('modal-new-project');
+      if (modalNewProject) modalNewProject.style.display = 'flex';
+    }
   }
 
   stdev(arr) {
@@ -100,11 +92,9 @@ class DMP41CalibrationApp {
     const btnTerminalSend = document.getElementById('btn-terminal-send');
     const isActuallyConnected = connStatusEl && connStatusEl.textContent === 'Connected';
 
-    // 1. Sync Polling buttons and Terminal with actual connection state
     if (isActuallyConnected) {
       if (terminalInput) terminalInput.disabled = false;
       if (btnTerminalSend) btnTerminalSend.disabled = false;
-
       if (this.isPolling) {
         if (btnStartPolling) btnStartPolling.disabled = true;
         if (btnStopPolling) btnStopPolling.disabled = false;
@@ -113,20 +103,16 @@ class DMP41CalibrationApp {
         if (btnStopPolling) btnStopPolling.disabled = true;
       }
     } else {
-      // Not connected - disable both polling buttons and terminal
       if (btnStartPolling) btnStartPolling.disabled = true;
       if (btnStopPolling) btnStopPolling.disabled = true;
       if (terminalInput) terminalInput.disabled = true;
       if (btnTerminalSend) btnTerminalSend.disabled = true;
-      // Force polling to stop if it was running
       if (this.isPolling) this.stopPolling();
     }
 
-    // 2. Enforce Mandatory Workflow Locking
     const hwPanel = document.getElementById('hardware-status');
     const monitorPanel = document.getElementById('live-monitor');
     const excelPanel = document.getElementById('excel-full-replica');
-
     const manualRefNo = document.getElementById('t1-ref-no')?.value.trim();
     const manualCapacity = document.getElementById('t1-capacity')?.value.trim();
     const hasValidProject = this.currentProject || (manualRefNo && manualCapacity);
@@ -151,1143 +137,562 @@ class DMP41CalibrationApp {
       const res = await fetch('/api/settings/load');
       const settings = await res.json();
       if (!settings || Object.keys(settings).length === 0) return;
-
-      if (settings.connection) {
-        if (settings.connection.tcp) {
-          if (document.getElementById('set-ip')) document.getElementById('set-ip').value = settings.connection.tcp.ip || '';
-          if (document.getElementById('set-port')) document.getElementById('set-port').value = settings.connection.tcp.port || '';
-          if (document.getElementById('main-ip')) document.getElementById('main-ip').value = settings.connection.tcp.ip || '192.168.1.100';
-          if (document.getElementById('main-port')) document.getElementById('main-port').value = settings.connection.tcp.port || '1234';
-        }
-      }
-
-      if (settings.instrument) {
-        if (document.getElementById('set-instrument')) document.getElementById('set-instrument').value = settings.instrument;
-        if (document.getElementById('disp-instrument')) document.getElementById('disp-instrument').textContent = settings.instrument;
+      if (settings.connection && settings.connection.tcp) {
+          const ip = settings.connection.tcp.ip || '192.168.1.100';
+          const port = settings.connection.tcp.port || '1234';
+          if (document.getElementById('main-ip')) document.getElementById('main-ip').value = ip;
+          if (document.getElementById('main-port')) document.getElementById('main-port').value = port;
       }
       if (settings.channel) {
         if (document.getElementById('set-channel')) document.getElementById('set-channel').value = settings.channel;
-        if (document.getElementById('disp-channel')) document.getElementById('disp-channel').textContent = settings.channel;
       }
-
-      // Coefficients
-      if (settings.coeff_a) document.getElementById('set-coeff-a').value = settings.coeff_a;
-      if (settings.coeff_b) document.getElementById('set-coeff-b').value = settings.coeff_b;
-      if (settings.coeff_c) document.getElementById('set-coeff-c').value = settings.coeff_c;
-      if (settings.ref_unc) document.getElementById('set-ref-unc').value = settings.ref_unc;
-      if (settings.sensitivity_ppm) document.getElementById('set-sensitivity').value = settings.sensitivity_ppm;
-      if (settings.resolution_kgf) document.getElementById('set-resolution').value = settings.resolution_kgf;
-      if (settings.stability_threshold) document.getElementById('set-stability').value = settings.stability_threshold;
-
-      // Ensure the system updates with new settings
+      if (settings.coeff_a) document.getElementById('t4-a').value = settings.coeff_a;
+      if (settings.coeff_b) document.getElementById('t4-b').value = settings.coeff_b;
+      if (settings.coeff_c) document.getElementById('t4-c').value = settings.coeff_c;
+      if (settings.ref_unc) document.getElementById('t4-u').value = settings.ref_unc;
+      if (settings.resolution_kgf) document.getElementById('t1-resolution').value = settings.resolution_kgf;
       this.renderLogger();
-    } catch (err) {
-      console.error('Failed to load settings:', err);
-    }
+    } catch (err) { console.error('Failed to load settings:', err); }
   }
 
   initEventListeners() {
-    // Top Bar Actions
     document.getElementById('btn-connect').addEventListener('click', () => this.triggerConnection());
-    document.getElementById('btn-config').addEventListener('click', () => document.getElementById('modal-settings').style.display = 'block');
-    document.getElementById('nav-settings').addEventListener('click', (e) => {
-      e.preventDefault();
-      document.getElementById('modal-settings').style.display = 'block';
-    });
     
-    // Terminal Actions
+    const btnAddStd = document.getElementById('btn-add-standard');
+    if(btnAddStd) btnAddStd.onclick = () => this.openStandardModal();
+    const btnEditStd = document.getElementById('btn-edit-standard');
+    if(btnEditStd) btnEditStd.onclick = () => this.openStandardModal(document.getElementById('lc-selector').value);
+    const btnDelStd = document.getElementById('btn-del-standard');
+    if(btnDelStd) btnDelStd.onclick = () => this.deleteStandard(document.getElementById('lc-selector').value);
+    const btnSaveStd = document.getElementById('btn-save-standard');
+    if(btnSaveStd) btnSaveStd.onclick = () => this.saveStandard();
+    const btnCloseStd = document.getElementById('close-standard');
+    if(btnCloseStd) btnCloseStd.onclick = () => document.getElementById('modal-standard').style.display = 'none';
+
     const modalTerminal = document.getElementById('modal-terminal');
     document.getElementById('btn-terminal').addEventListener('click', () => {
-      modalTerminal.style.display = 'block';
+      modalTerminal.style.display = 'flex';
       document.getElementById('terminal-input').focus();
     });
     document.getElementById('btn-terminal-send').addEventListener('click', () => this.sendTerminalCommand());
     document.getElementById('terminal-input').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        this.sendTerminalCommand();
-      }
+      if (e.key === 'Enter') this.sendTerminalCommand();
     });
     
-    // Hardware Mode Toggle
     document.getElementById('hw-mode-select').addEventListener('change', (e) => {
       document.getElementById('btn-connect').disabled = false;
       this.setHardwareMode(e.target.value);
     });
 
-    // Monitor Actions
     document.getElementById('btn-start-polling').addEventListener('click', () => this.startPolling());
     document.getElementById('btn-stop-polling').addEventListener('click', () => this.stopPolling());
-
     document.getElementById('btn-add-t2-row').addEventListener('click', () => this.addTestPoint('preloading'));
     document.getElementById('btn-add-t3-row').addEventListener('click', () => this.addTestPoint('measured'));
+    document.getElementById('btn-del-t2-row').addEventListener('click', () => this.deleteTestPoint('preloading'));
+    document.getElementById('btn-del-t3-row').addEventListener('click', () => this.deleteTestPoint('measured'));
 
-    // Live Monitor Nav fix
     const btnMonitor = document.querySelector('a[href="#live-monitor"]');
     if (btnMonitor) {
       btnMonitor.addEventListener('click', (e) => {
-        // e.preventDefault();
         const el = document.getElementById('live-monitor');
         if (el) el.scrollIntoView({ behavior: 'smooth' });
-        // Optionally start polling if not active
-        if (this.connectionState === 'connected' && !this.isPolling) {
-            this.startPolling();
-        }
+        if (this.connectionState === 'connected' && !this.isPolling) this.startPolling();
       });
     }
 
-    // History Nav
     const btnHistory = document.getElementById('nav-history-link-btn');
-    if (btnHistory) {
-      btnHistory.addEventListener('click', () => {
-        document.getElementById('modal-history-list').style.display = 'block';
-        this.loadHistory();
-      });
-    }
-
-    // Archive Nav
+    if (btnHistory) btnHistory.addEventListener('click', () => { document.getElementById('modal-history-list').style.display = 'flex'; this.loadHistory(); });
     const btnArchive = document.getElementById('nav-archive-link-btn');
-    if (btnArchive) {
-      btnArchive.addEventListener('click', () => {
-        document.getElementById('modal-archive-list').style.display = 'block';
-        this.loadHistory('', true); // true for archived
-      });
-    }
-
+    if (btnArchive) btnArchive.addEventListener('click', () => { document.getElementById('modal-archive-list').style.display = 'flex'; this.loadHistory('', true); });
+    
     const btnSaveHistory = document.getElementById('btn-save-history');
-    if (btnSaveHistory) {
-      btnSaveHistory.addEventListener('click', () => this.saveToHistory(true));
-    }
+    if (btnSaveHistory) btnSaveHistory.addEventListener('click', () => this.saveToHistory(true, false));
 
-    // History & Archive Search & Navigation
+    const btnSaveAs = document.getElementById('btn-save-as');
+    if (btnSaveAs) btnSaveAs.addEventListener('click', () => this.saveToHistory(true, true));
+
     const histSearch = document.getElementById('history-search');
-    if (histSearch) {
-      histSearch.addEventListener('input', () => this.loadHistory(histSearch.value, false));
-    }
+    if (histSearch) histSearch.addEventListener('input', () => this.loadHistory(histSearch.value, false));
     const archSearch = document.getElementById('archive-search');
-    if (archSearch) {
-      archSearch.addEventListener('input', () => this.loadHistory(archSearch.value, true));
-    }
+    if (archSearch) archSearch.addEventListener('input', () => this.loadHistory(archSearch.value, true));
+    
     const btnHistBack = document.getElementById('btn-hist-back');
-    if (btnHistBack) {
-      btnHistBack.addEventListener('click', () => {
+    if (btnHistBack) btnHistBack.addEventListener('click', () => {
         document.getElementById('modal-history-view').style.display = 'none';
         if (this.currentHistoricalData && this.currentHistoricalData.is_archived) {
-            document.getElementById('modal-archive-list').style.display = 'block';
+            document.getElementById('modal-archive-list').style.display = 'flex';
             this.loadHistory('', true);
         } else {
-            document.getElementById('modal-history-list').style.display = 'block';
+            document.getElementById('modal-history-list').style.display = 'flex';
             this.loadHistory();
         }
-      });
-    }
+    });
 
-    // Logger Actions
+    const btnHistArchive = document.getElementById('btn-hist-archive');
+    if (btnHistArchive) btnHistArchive.onclick = () => this.archiveHistoricalRecord();
+    const btnHistUnarchive = document.getElementById('btn-hist-unarchive');
+    if (btnHistUnarchive) btnHistUnarchive.onclick = () => this.unarchiveHistoricalRecord();
+    const btnHistLoadDemo = document.getElementById('btn-hist-load-demo');
+    if (btnHistLoadDemo) btnHistLoadDemo.onclick = () => this.loadHistoricalAsDemo();
+    const btnHistExcel = document.getElementById('btn-hist-excel');
+    if (btnHistExcel) btnHistExcel.onclick = () => this.exportHistoricalExcel();
+    const btnHistPrint = document.getElementById('btn-hist-print');
+    if (btnHistPrint) btnHistPrint.onclick = () => {
+      if (!this.currentHistoricalData || !this.currentHistoricalData.id) return;
+      window.open(`/api/export/pdf/${this.currentHistoricalData.id}`, '_blank');
+    };
+
     document.getElementById('btn-excel-capture').addEventListener('click', () => this.captureToSelectedCell());
     document.getElementById('btn-excel-clear').addEventListener('click', () => this.clearLoggerData());
     document.getElementById('btn-excel-export').addEventListener('click', () => this.syncLoggerToExcel());
 
-    document.getElementById('btn-load-demo').addEventListener('click', () => this.loadDemoData());
-
-    // Load Cell & Unit Actions
     this.initLoadCellSelector();
     document.querySelectorAll('.unit-btn').forEach(btn => {
       btn.onclick = () => this.setSystemUnit(btn.dataset.unit);
     });
 
-    document.getElementById('btn-config')?.addEventListener('click', () => document.getElementById('modal-settings').style.display = 'block');
-    document.getElementById('nav-settings')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      document.getElementById('modal-settings').style.display = 'block';
+    ['t1-ref-no', 't1-capacity', 't1-item', 't1-date', 't1-lc-sn', 't1-ind-sn', 't1-lc-make', 't1-ind-make', 't1-mode', 't1-range', 't1-increment', 't1-resolution', 't1-client-name', 't1-client-address'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', () => { this.enforceUIState(); this.renderLogger(); });
     });
 
-    const btnSaveSettings = document.getElementById('btn-save-settings');
-    if (btnSaveSettings) {
-      btnSaveSettings.addEventListener('click', () => {
-        this.saveSettings();
-        document.getElementById('modal-settings').style.display = 'none';
-      });
-    }
-
-    // Dynamic UI unlocking based on Table 1 manual entry
-    const table1Inputs = ['t1-ref-no', 't1-capacity', 't1-item', 't1-date', 't1-sn', 't1-mode', 't1-range', 't1-make', 't1-increment', 't1-resolution'];
-    table1Inputs.forEach(id => {
-      document.getElementById(id)?.addEventListener('input', () => {
-        this.enforceUIState();
-        // If we want the system to "update", maybe render logger too if anything depends on it
-        this.renderLogger(); 
-      });
+    ['t4-a', 't4-b', 't4-c', 't4-u', 't4-drift', 't5-temp-b', 't5-temp-a', 't5-hum-b', 't5-hum-a'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', () => this.renderLogger());
     });
 
-    const btnDefaultSettings = document.getElementById('btn-default-settings');
-    if (btnDefaultSettings) {
-      btnDefaultSettings.addEventListener('click', () => this.restoreDefaultSettings());
-    }
-
-    // Real-time recalculation listeners
-    ['t4-a', 't4-b', 't4-c', 't4-u', 'set-coeff-a', 'set-coeff-b', 'set-coeff-c', 'set-ref-unc', 't5-temp-b', 't5-temp-a', 't5-hum-b', 't5-hum-a'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.addEventListener('input', () => {
-          this.renderLogger();
-      });
-    });
-
-    // --- Modals ---
-    // New Project Modal
-    const modalNewProject = document.getElementById('modal-new-project');
     const btnNewProject = document.getElementById('btn-new-project');
-    if (btnNewProject) {
-      btnNewProject.addEventListener('click', () => modalNewProject.style.display = 'block');
-    }
+    if (btnNewProject) btnNewProject.addEventListener('click', () => {
+      if (confirm("Clear current workspace and start a new project? Unsaved changes will be lost.")) {
+        this.resetWorkspace();
+      }
+    });
     const btnSubmitProject = document.getElementById('btn-submit-project');
-    if (btnSubmitProject) {
-      btnSubmitProject.addEventListener('click', () => this.createProject());
-    }
+    if (btnSubmitProject) btnSubmitProject.addEventListener('click', () => this.createProject());
 
-    // Close Modals
-    document.querySelectorAll('.close').forEach(btn => {
-      btn.addEventListener('click', () => {
-        btn.closest('.modal').style.display = 'none';
-      });
-    });
+    document.querySelectorAll('.close').forEach(btn => btn.addEventListener('click', () => btn.closest('.modal').style.display = 'none'));
+    window.addEventListener('click', (e) => { if (e.target.classList.contains('modal')) e.target.style.display = 'none'; });
 
-    // Close Modals on outside click
-    window.addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal')) {
-        e.target.style.display = 'none';
-      }
-    });
-
-    // Scroll listener for Live Monitor Mini Window
     window.addEventListener('scroll', () => {
-      const monitor = document.getElementById('live-monitor');
-      const placeholder = document.getElementById('live-monitor-placeholder');
+      const monitor = document.getElementById('live-monitor'), placeholder = document.getElementById('live-monitor-placeholder');
       if (!monitor || !placeholder) return;
-
       const rect = placeholder.getBoundingClientRect();
-      
-      if (!monitor.classList.contains('mini-window')) {
-        placeholder.dataset.origHeight = monitor.offsetHeight;
-        placeholder.dataset.origMargin = window.getComputedStyle(monitor).marginBottom;
-      }
-
+      if (!monitor.classList.contains('mini-window')) { placeholder.dataset.origHeight = monitor.offsetHeight; placeholder.dataset.origMargin = window.getComputedStyle(monitor).marginBottom; }
       const origHeight = parseInt(placeholder.dataset.origHeight || 0);
-      
-      // Trigger when the placeholder's top is scrolled up past the viewport 
-      // by an amount equal to the monitor's original height + a small buffer
       if (rect.top < -(origHeight + 20)) {
-        if (!monitor.classList.contains('mini-window')) {
-          placeholder.style.height = `${origHeight}px`;
-          placeholder.style.marginBottom = placeholder.dataset.origMargin;
-          monitor.classList.add('mini-window');
-        }
-      } else {
-        if (monitor.classList.contains('mini-window')) {
-          monitor.classList.remove('mini-window');
-          placeholder.style.height = '0px';
-          placeholder.style.marginBottom = '0px';
-        }
-      }
+        if (!monitor.classList.contains('mini-window')) { placeholder.style.height = `${origHeight}px`; placeholder.style.marginBottom = placeholder.dataset.origMargin; monitor.classList.add('mini-window'); }
+      } else if (monitor.classList.contains('mini-window')) { monitor.classList.remove('mini-window'); placeholder.style.height = '0px'; placeholder.style.marginBottom = '0px'; }
     });
   }
 
-  restoreDefaultSettings() {
-    if (!confirm("Are you sure you want to restore all settings to their factory defaults? This will overwrite your current configuration in the form.")) {
-      return;
-    }
-
-    // Connection
-    if (document.getElementById('set-ip')) document.getElementById('set-ip').value = '192.168.1.100';
-    if (document.getElementById('set-port')) document.getElementById('set-port').value = '1234';
-
-    // Instrument
-    if (document.getElementById('set-instrument')) document.getElementById('set-instrument').value = 'DMP41';
-    if (document.getElementById('set-channel')) document.getElementById('set-channel').value = '1';
-
-    // Coefficients
-    if (document.getElementById('set-coeff-a')) document.getElementById('set-coeff-a').value = '1.0';
-    if (document.getElementById('set-coeff-b')) document.getElementById('set-coeff-b').value = '0.0';
-    if (document.getElementById('set-coeff-c')) document.getElementById('set-coeff-c').value = '0.0';
-    if (document.getElementById('set-ref-unc')) document.getElementById('set-ref-unc').value = '0.02';
-    if (document.getElementById('set-sensitivity')) document.getElementById('set-sensitivity').value = '50';
-    if (document.getElementById('set-resolution')) document.getElementById('set-resolution').value = '0.01';
-    if (document.getElementById('set-stability')) document.getElementById('set-stability').value = '0.000010';
-
-    alert("Defaults restored in the form. Please click 'Save All Settings' to apply them to the system.");
+  // --- Standard Management ---
+  openStandardModal(standardId = null) {
+    const modal = document.getElementById('modal-standard'), title = document.getElementById('std-modal-title'), dbIdInput = document.getElementById('std-db-id');
+    ['std-model', 'std-sn', 'std-cap', 'std-u', 'std-coeff-a', 'std-coeff-b', 'std-coeff-c', 'std-cert', 'std-date'].forEach(id => { 
+        const el = document.getElementById(id);
+        if (el) el.value = ''; 
+    });
+    if (standardId && (typeof standardId === 'string') && standardId.startsWith('custom_')) {
+        const s = this.loadCells.find(x => x.id === standardId);
+        if (s) {
+            title.textContent = "Edit Custom Standard"; dbIdInput.value = s.db_id;
+            document.getElementById('std-model').value = s.model || ''; document.getElementById('std-sn').value = s.sn || '';
+            document.getElementById('std-cap').value = parseFloat(s.capacity) || ''; document.getElementById('std-u').value = s.uncertainty || '';
+            document.getElementById('std-coeff-a').value = s.coeff_a || ''; document.getElementById('std-coeff-b').value = s.coeff_b || '';
+            document.getElementById('std-coeff-c').value = s.coeff_c || ''; document.getElementById('std-cert').value = s.cert_no || '';
+            document.getElementById('std-date').value = s.cal_date || '';
+        }
+    } else if (standardId && standardId !== "") { alert("System standards cannot be edited."); return; }
+    else { title.textContent = "Add New Standard"; dbIdInput.value = ''; }
+    modal.style.display = 'flex';
   }
 
-  async saveSettings() {
-    const settings = {
-      connection: {
-        tcp: {
-          ip: document.getElementById('set-ip')?.value,
-          port: document.getElementById('set-port')?.value
-        }
-      },
-      instrument: document.getElementById('set-instrument')?.value,
-      channel: document.getElementById('set-channel')?.value,
-      coeff_a: document.getElementById('set-coeff-a')?.value,
-      coeff_b: document.getElementById('set-coeff-b')?.value,
-      coeff_c: document.getElementById('set-coeff-c')?.value,
-      ref_unc: document.getElementById('set-ref-unc')?.value,
-      sensitivity_ppm: document.getElementById('set-sensitivity')?.value,
-      resolution_kgf: document.getElementById('set-resolution')?.value,
-      stability_threshold: document.getElementById('set-stability')?.value
+  async saveStandard() {
+    const dbId = document.getElementById('std-db-id').value;
+    const payload = {
+        model: document.getElementById('std-model').value, sn: document.getElementById('std-sn').value,
+        capacity_kn: parseFloat(document.getElementById('std-cap').value), uncertainty: parseFloat(document.getElementById('std-u').value),
+        coeff_a: parseFloat(document.getElementById('std-coeff-a').value), coeff_b: parseFloat(document.getElementById('std-coeff-b').value),
+        coeff_c: parseFloat(document.getElementById('std-coeff-c').value), cert_no: document.getElementById('std-cert').value, cal_date: document.getElementById('std-date').value
     };
 
-    try {
-      const response = await fetch('/api/settings/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
-      });
-      if (response.ok) {
-        alert("Settings saved successfully.");
-        await this.loadSettings(); 
-      } else {
-        alert("Failed to save settings.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Error saving settings.");
-    }
-  }
-
-  initChart() {
-    const ctx = document.getElementById('chart-readings');
-    if (!ctx) return;
-    
-    this.chart = new Chart(ctx.getContext('2d'), {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [{
-          label: 'Force (mV/V)',
-          data: [],
-          borderColor: '#001D53',
-          backgroundColor: 'rgba(0, 86, 179, 0.1)',
-          tension: 0.1,
-          fill: true
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 0 },
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { display: false },
-          y: { beginAtZero: false }
-        }
-      }
-    });
-  }
-
-  async sendTerminalCommand() {
-    const inputEl = document.getElementById('terminal-input');
-    let command = inputEl.value.trim();
-    if (!command) return;
-
-    // Auto-uppercase hardware commands (local commands start with /)
-    if (!command.startsWith('/')) {
-      command = command.toUpperCase();
-    }
-
-    this.appendTerminalOutput(`> ${command}`, '#00ff00');
-    inputEl.value = '';
-
-    // Handle local commands
-    if (command.toLowerCase() === '/help') {
-      this.appendTerminalOutput('--- DMP41 TERMINAL HELP & USAGE ---', '#ffcc00');
-      this.appendTerminalOutput('Command Format Guide:', '#ffcc00');
-      this.appendTerminalOutput('  Query a value:   Type the 3-letter command followed by "?" (e.g., MSV?, IDT?)', '#d4d4d4');
-      this.appendTerminalOutput('  Set a value:     Type the 3-letter command followed by the parameter (e.g., CHS1)', '#d4d4d4');
-      this.appendTerminalOutput('  Execute action:  Type the 3-letter command alone (e.g., TAR)', '#d4d4d4');
-      this.appendTerminalOutput(' ', '#d4d4d4');
-      this.appendTerminalOutput('Terminal Output Guide:', '#ffcc00');
-      this.appendTerminalOutput('  [OK]    : Command was successfully executed by the hardware.', '#99CC33');
-      this.appendTerminalOutput('  [ERROR] : Hardware rejected the command (Syntax error, unsupported, or lacks Admin Rights).', '#ff5555');
-      this.appendTerminalOutput('  Reply   : Data requested from the hardware.', '#00d2ff');
-      this.appendTerminalOutput(' ', '#d4d4d4');
-      this.appendTerminalOutput('Common ASCII Commands:', '#ffcc00');
-      this.appendTerminalOutput('  MSV?24        - Read Net mV/V value (Primary reading)', '#d4d4d4');
-      this.appendTerminalOutput('  MSV?0         - Read Gross/Display value', '#d4d4d4');
-      this.appendTerminalOutput('  TAR           - Tare the instrument (Needs Admin Rights)', '#d4d4d4');
-      this.appendTerminalOutput('  TDT           - Remove/Delete Tare (Needs Admin Rights)', '#d4d4d4');
-      this.appendTerminalOutput('  CHS<n>        - Select channel (e.g., CHS1, CHS2)', '#d4d4d4');
-      this.appendTerminalOutput('  RAR<password> - Request Admin Rights (Default: RAR1234)', '#d4d4d4');
-      this.appendTerminalOutput('  IDT?          - Request device identification type', '#d4d4d4');
-      this.appendTerminalOutput('  NOV?          - Request firmware version', '#d4d4d4');
-      this.appendTerminalOutput('  /clear        - (Local) Clear the terminal screen', '#d4d4d4');
-      this.appendTerminalOutput('------------------------------------', '#ffcc00');
-      return;
-    }
-
-    if (command.toLowerCase() === '/clear') {
-      document.getElementById('terminal-output').innerHTML = '';
-      this.appendTerminalOutput('Terminal cleared.', '#00ff00');
-      return;
-    }
+    if (!payload.model || !payload.sn) { alert("Model and Serial Number are required."); return; }
+    if (isNaN(payload.capacity_kn) || payload.capacity_kn <= 0) { alert("Capacity must be a positive number."); return; }
+    if (isNaN(payload.coeff_a) || isNaN(payload.coeff_b) || isNaN(payload.coeff_c)) { alert("Polynomial coefficients (A, B, C) must be valid numbers."); return; }
+    if (isNaN(payload.uncertainty)) { alert("Uncertainty must be a valid number."); return; }
 
     try {
-      const response = await fetch('/api/hardware/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command })
-      });
-      const data = await response.json();
-      
-      if (response.ok) {
-        const reply = data.response;
-        // Interpret standard DMP41 responses for better feedback
-        if (reply === '0') {
-          this.appendTerminalOutput(`  [OK] Command accepted successfully (0)`, '#99CC33'); // Green
-        } else if (reply === '?') {
-          this.appendTerminalOutput(`  [ERROR] Hardware rejected the command: Syntax error, unsupported, or lacks Admin Rights (?)`, '#ff5555'); // Red
+        const url = dbId ? `/api/config/load-cells/${dbId}` : '/api/config/load-cells';
+        const method = dbId ? 'PUT' : 'POST';
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const result = await res.json();
+        
+        if (res.ok) { 
+            alert("Standard saved successfully."); 
+            document.getElementById('modal-standard').style.display = 'none'; 
+            await this.initLoadCellSelector(); 
         } else {
-          this.appendTerminalOutput(`  Reply: ${reply}`, '#00d2ff'); // Cyan
+            alert(result.error || "Failed to save standard.");
         }
-      } else {
-        this.appendTerminalOutput(`  Error: ${data.error}`, '#ff5555');
-      }
-    } catch (err) {
-      this.appendTerminalOutput(`  Request failed: ${err.message}`, '#ff5555');
+    } catch (e) { 
+        console.error(e); 
+        alert("An error occurred while saving the standard.");
     }
   }
 
-  appendTerminalOutput(text, color) {
-    const outputEl = document.getElementById('terminal-output');
-    const div = document.createElement('div');
-    div.textContent = text;
-    div.style.color = color;
-    outputEl.appendChild(div);
-    outputEl.scrollTop = outputEl.scrollHeight;
+  async deleteStandard(standardId) {
+    if (!standardId || !standardId.startsWith('custom_')) { alert("Cannot delete this standard."); return; }
+    if (!confirm("Delete this custom standard?")) return;
+    try {
+        const res = await fetch(`/api/config/load-cells/${standardId.replace('custom_', '')}`, { method: 'DELETE' });
+        if (res.ok) { alert("Standard deleted."); await this.initLoadCellSelector(); }
+    } catch (e) { console.error(e); }
   }
 
-  updateStatusBar(text, percent) {
-    const bar = document.getElementById('calibration-status-bar');
-    const textEl = document.getElementById('status-text');
-    const progressEl = document.getElementById('progress-bar');
-    const percentEl = document.getElementById('status-percent');
-
-    if (!bar) return;
-
-    if (text === null) {
-      bar.style.display = 'none';
-      return;
-    }
-
-    bar.style.display = 'flex';
-    if (textEl) textEl.textContent = text;
-    if (progressEl) progressEl.style.width = percent + '%';
-    if (percentEl) percentEl.textContent = Math.round(percent) + '%';
+  async initLoadCellSelector() {
+    try {
+      const res = await fetch('/api/config/load-cells'); this.loadCells = await res.json();
+      const sel = document.getElementById('lc-selector'); sel.innerHTML = '<option value="">-- Select Standard --</option>';
+      const sys = this.loadCells.filter(lc => lc.is_system), cst = this.loadCells.filter(lc => !lc.is_system);
+      const addGrp = (lbl, arr) => {
+        if (arr.length === 0) return;
+        const g = document.createElement('optgroup'); g.label = lbl;
+        arr.forEach(lc => { const o = document.createElement('option'); o.value = lc.id; o.textContent = `${lc.model} (${lc.capacity})`; g.appendChild(o); });
+        sel.appendChild(g);
+      };
+      addGrp("System Standards", sys); addGrp("User Defined Standards", cst);
+      sel.onchange = (e) => {
+        const s = this.loadCells.find(lc => lc.id == e.target.value);
+        if (s) {
+          ['t4-a', 'set-coeff-a'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).value = s.coeff_a; });
+          ['t4-b', 'set-coeff-b'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).value = s.coeff_b; });
+          ['t4-c', 'set-coeff-c'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).value = s.coeff_c; });
+          ['t4-u', 'set-ref-unc'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).value = s.uncertainty; });
+          const map = { 't4-model': s.model, 't4-cap': s.capacity, 't4-sn': s.sn, 't4-cert': s.cert_no, 't4-date': s.cal_date };
+          Object.entries(map).forEach(([id, val]) => { if(document.getElementById(id)) document.getElementById(id).value = val || ''; });
+          alert(`Standard loaded: ${s.model}`); this.renderLogger(); 
+        }
+      };
+    } catch (e) { console.error(e); }
   }
 
   async checkHardwareStatus() {
     try {
-      const response = await fetch('/api/hardware/status');
-      const status = await response.json();
-      
-      const connStatusEl = document.getElementById('conn-status');
-      if (status.connectionState === 'connected') {
-        connStatusEl.textContent = 'Connected';
-        connStatusEl.style.color = 'var(--success-color)';
-        if (!this.isPolling) {
-          document.getElementById('btn-start-polling').disabled = false;
-        }
-      } else if (status.connectionState === 'standby') {
-        connStatusEl.textContent = 'Standby';
-        connStatusEl.style.color = 'var(--warning-color)';
-        document.getElementById('btn-start-polling').disabled = true;
-        if (this.isPolling) this.stopPolling();
-      } else {
-        connStatusEl.textContent = 'Disconnected';
-        connStatusEl.style.color = 'var(--danger-color)';
-        document.getElementById('btn-start-polling').disabled = true;
-        if (this.isPolling) this.stopPolling();
+      const res = await fetch('/api/hardware/status');
+      const status = await res.json();
+      this.connectionState = status.connectionState;
+      const el = document.getElementById('conn-status');
+      if (el) {
+          if (status.connected) {
+              el.textContent = 'Connected';
+              el.style.color = '#10b981';
+          } else {
+              el.textContent = status.connectionState === 'standby' ? 'Standby' : 'Disconnected';
+              el.style.color = '#ef4444';
+          }
       }
-      
-      const modeSelect = document.getElementById('hw-mode-select');
-      if (modeSelect && modeSelect.value !== '') {
-        modeSelect.value = status.mode || 'demo';
-      }
+      this.enforceUIState();
     } catch (err) {
-      console.error('Connection check failed:', err);
-      const connStatusEl = document.getElementById('conn-status');
-      connStatusEl.textContent = 'Error';
-      connStatusEl.style.color = 'var(--danger-color)';
-      document.getElementById('btn-start-polling').disabled = true;
-      if (this.isPolling) this.stopPolling();
-    }
-  }
-
-  async syncProjectData() {
-    const date = document.getElementById('t1-date')?.value;
-    const mode = document.getElementById('t1-mode')?.value;
-    const refNo = document.getElementById('t1-ref-no')?.value;
-    const capacity = document.getElementById('t1-capacity')?.value;
-    const item = document.getElementById('t1-item')?.value;
-    const range = document.getElementById('t1-range')?.value;
-    const make = document.getElementById('t1-make')?.value;
-    const increment = document.getElementById('t1-increment')?.value;
-    const sn = document.getElementById('t1-sn')?.value;
-    const resolution = document.getElementById('t1-resolution')?.value;
-
-    const coeffA = document.getElementById('t4-a')?.value || document.getElementById('set-coeff-a')?.value;
-    const coeffB = document.getElementById('t4-b')?.value || document.getElementById('set-coeff-b')?.value;
-    const coeffC = document.getElementById('t4-c')?.value || document.getElementById('set-coeff-c')?.value;
-    const refUnc = document.getElementById('t4-u')?.value || document.getElementById('set-ref-unc')?.value;
-
-    const refModel = document.getElementById('t4-model')?.value;
-    const refCap = document.getElementById('t4-cap')?.value;
-    const refSn = document.getElementById('t4-sn')?.value;
-    const refCert = document.getElementById('t4-cert')?.value;
-    const refDate = document.getElementById('t4-date')?.value;
-
-    const tempB = document.getElementById('t5-temp-b')?.value;
-    const tempA = document.getElementById('t5-temp-a')?.value;
-    const humB = document.getElementById('t5-hum-b')?.value;
-    const humA = document.getElementById('t5-hum-a')?.value;
-
-    if (!refNo || !capacity) return false;
-
-    const payload = {
-        project_name: refNo,
-        calibration_date: date,
-        mode: mode,
-        capacity_kgf: parseFloat(capacity) || 0,
-        instrument_name: item,
-        range_text: range,
-        make_model: make,
-        increment: increment,
-        serial_number: sn,
-        resolution: resolution,
-        coeff_a: parseFloat(coeffA) || 1.0,
-        coeff_b: parseFloat(coeffB) || 0.0,
-        coeff_c: parseFloat(coeffC) || 0.0,
-        ref_unc: parseFloat(refUnc) || 0.02,
-        ref_model: refModel,
-        ref_capacity: refCap,
-        ref_sn: refSn,
-        ref_cert: refCert,
-        ref_date: refDate,
-        temperature_before: parseFloat(tempB) || 0,
-        temperature_after: parseFloat(tempA) || 0,
-        humidity_before: parseFloat(humB) || 0,
-        humidity_after: parseFloat(humA) || 0,
-        output_unit: this.currentUnit
-    };
-
-    try {
-      if (this.currentProject) {
-         await fetch(`/api/calibration/projects/${this.currentProject.id}`, {
-             method: 'PUT',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify(payload)
-         });
-         Object.assign(this.currentProject, payload);
-      } else {
-         const res = await fetch('/api/calibration/projects', {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify(payload)
-         });
-         const data = await res.json();
-         if(data.project_id) {
-             this.currentProject = { id: data.project_id, ...payload };
-         }
-      }
-      return true;
-    } catch(e) {
-      console.error("Failed to sync project data:", e);
-      return false;
+      console.error(err);
     }
   }
 
   async triggerConnection() {
-    await this.syncProjectData(); // Sync manual edits before connecting hardware
-    
+    await this.syncProjectData();
     document.getElementById('conn-status').textContent = 'Connecting...';
-    document.getElementById('conn-status').style.color = 'black';
-    
-    const payload = { 
-      tcp: {
-        ip: document.getElementById('main-ip')?.value || '192.168.1.100',
-        port: document.getElementById('main-port')?.value || '1234'
-      }
-    };
-
+    const ip = document.getElementById('main-ip')?.value || '192.168.1.100', port = document.getElementById('main-port')?.value || '1234', ch = document.getElementById('set-channel')?.value || '1';
     try {
-      const res = await fetch('/api/hardware/connect', { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      await res.json();
-    } catch (err) {
-      console.error(err);
-    }
+      await fetch('/api/hardware/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tcp: { ip, port }, channel: ch }) });
+      await fetch('/api/settings/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ connection: { tcp: { ip, port } }, channel: ch }) });
+    } catch (err) { console.error(err); }
     this.checkHardwareStatus();
   }
 
   async setHardwareMode(mode) {
-    try {
-      const res = await fetch('/api/hardware/mode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode })
-      });
-      await res.json();
-      this.checkHardwareStatus(); // Refresh status
-    } catch (err) {
-      console.error('Failed to set hardware mode:', err);
-      alert('Failed to change hardware mode.');
-    }
+    try { await fetch('/api/hardware/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) }); this.checkHardwareStatus(); }
+    catch (err) { console.error(err); }
   }
 
   async startPolling() {
-    this.isPolling = true;
-    document.getElementById('btn-start-polling').disabled = true;
-    document.getElementById('btn-stop-polling').disabled = false;
-
+    this.isPolling = true; document.getElementById('btn-start-polling').disabled = true; document.getElementById('btn-stop-polling').disabled = false;
     this.pollInterval = setInterval(async () => {
       try {
-        const response = await fetch('/api/hardware/read?channel=1&type=24');
-        const data = await response.json();
-
-        this.currentReadings.push({
-          timestamp: new Date(),
-          raw_mvv: data.raw_deflection
-        });
-
-        if (this.currentReadings.length > 50) {
-          this.currentReadings.shift();
-        }
-
-        const def = data.raw_deflection || 0;
-        document.getElementById('reading-mvv').textContent = def.toFixed(6);
-
-        // Calculate KGF
-        const a = parseFloat(document.getElementById('set-coeff-a')?.value || 1);
-        const b = parseFloat(document.getElementById('set-coeff-b')?.value || 0);
-        const c = parseFloat(document.getElementById('set-coeff-c')?.value || 0);
-
-        // F = AD + BD^2 + CD^3 (Result is in kN from sensor coeffs)
-        const forceKn = (a * def) + (b * Math.pow(def, 2)) + (c * Math.pow(def, 3));
-        
-        // Convert from kN to Selected Unit
-        // Constant conversion: 1 kN = (1/target_constant) units
-        const kgfConst = this.unitConstants['kgf']; // 0.00980665
-        const targetConst = this.unitConstants[this.currentUnit];
-        const displayValue = forceKn / targetConst;
-
-        const kgfEl = document.getElementById('reading-kgf'); 
-        if (kgfEl) kgfEl.textContent = displayValue.toFixed(this.currentUnit === 'kN' ? 6 : 3);   
-
+        const res = await fetch('/api/hardware/read?channel=1&type=24'); const d = await res.json();
+        const def = d.raw_deflection || 0; this.currentReadings.push({ timestamp: new Date(), raw_mvv: def });
+        if (this.currentReadings.length > 50) this.currentReadings.shift();
+        document.getElementById('reading-mvv').textContent = def.toFixed(5);
+        const a = parseFloat(document.getElementById('t4-a')?.value || 1), b = parseFloat(document.getElementById('t4-b')?.value || 0), c = parseFloat(document.getElementById('t4-c')?.value || 0);
+        const f = (a * def) + (b * Math.pow(def, 2)) + (c * Math.pow(def, 3));
+        const val = f / this.unitConstants[this.currentUnit];
+        if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = val.toFixed(2);   
         this.updateChart(def);
-
-      } catch (err) {
-        console.error('Polling error:', err);
-      }
-    }, 150);  }
-
-  stopPolling() {
-    this.isPolling = false;
-    clearInterval(this.pollInterval);
-    document.getElementById('btn-start-polling').disabled = false;
-    document.getElementById('btn-stop-polling').disabled = true;
-    
-    // Set reading to 0 when stopped
-    document.getElementById('reading-mvv').textContent = '0.000000';
-    const kgfEl = document.getElementById('reading-kgf');
-    if (kgfEl) kgfEl.textContent = '0.000';
-    
-    this.updateChart(0);
+      } catch (err) { console.error(err); }
+    }, 150);
   }
 
-  // --- Project Actions ---
-  
+  stopPolling() { this.isPolling = false; clearInterval(this.pollInterval); document.getElementById('btn-start-polling').disabled = false; document.getElementById('btn-stop-polling').disabled = true; document.getElementById('reading-mvv').textContent = '0.00000'; if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = '0.00'; this.updateChart(0); }
+
   async createProject() {
-    const date = document.getElementById('np-date').value;
-    const mode = document.getElementById('np-mode').value;
-    const refNo = document.getElementById('np-name').value;
-    const capacity = document.getElementById('np-capacity').value;
-    const item = document.getElementById('np-item').value;
-    const range = document.getElementById('np-range').value;
-    const make = document.getElementById('np-make').value;
-    const increment = document.getElementById('np-increment').value;
-    const sn = document.getElementById('np-sn').value;
-    const resolution = document.getElementById('np-resolution').value;
+    const d = document.getElementById('np-date').value, m = document.getElementById('np-mode').value, n = document.getElementById('np-name').value, c = document.getElementById('np-capacity').value, i = document.getElementById('np-item').value, r = document.getElementById('np-range').value, lm = document.getElementById('np-lc-make')?.value || '', ls = document.getElementById('np-lc-sn')?.value || '', im = document.getElementById('np-ind-make')?.value || '', is = document.getElementById('np-ind-sn')?.value || '', inc = document.getElementById('np-increment').value, res = document.getElementById('np-resolution').value;
+    const clientName = document.getElementById('np-client-name').value;
+    const clientAddress = document.getElementById('np-client-address').value;
 
-    if (!refNo || !capacity) {
-      alert("Request Ref. No. and Capacity are required.");
-      return;
-    }
-
+    if (!n || !c) { alert("Ref. No. and Capacity required."); return; }
     try {
-      await fetch('/api/calibration/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_name: refNo,
-          calibration_date: date,
-          mode: mode,
-          capacity_kgf: parseFloat(capacity) || 0,
-          instrument_name: item,
-          range_text: range,
-          make_model: make,
-          increment: increment,
-          serial_number: sn,
-          resolution: resolution
-        })
+      await fetch('/api/calibration/projects', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ 
+          project_name: n, 
+          client_name: clientName,
+          client_address: clientAddress,
+          calibration_date: d, 
+          mode: m, 
+          capacity_kgf: parseFloat(c) || 0,
+          capacity_text: c,
+          instrument_name: i, 
+          range_text: r, 
+          lc_make: lm, 
+          lc_sn: ls, 
+          ind_make: im, 
+          ind_sn: is, 
+          increment: inc, 
+          serial_number: ls, 
+          resolution: res,
+          output_unit: this.currentUnit,
+          standard_id: document.getElementById('lc-selector')?.value || ''
+        }) 
       });
-      document.getElementById('modal-new-project').style.display = 'none';
-      await this.loadProjects();
-      alert("Project created successfully.");
-    } catch (err) {
-      console.error('Error creating project:', err);
-      alert("Failed to create project.");
-    }
+      document.getElementById('modal-new-project').style.display = 'none'; await this.loadProjects(); alert("Project created.");
+    } catch (err) { console.error(err); }
   }
 
-  updateChart(value) {
+  updateChart(v) {
     if (!this.chart) return;
-    const now = new Date();
-    const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
-    
-    this.chart.data.labels.push(timeStr);
-    this.chart.data.datasets[0].data.push(value);
-    
-    if (this.chart.data.labels.length > 50) {
-      this.chart.data.labels.shift();
-      this.chart.data.datasets[0].data.shift();
-    }
-    
+    const now = new Date(), t = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+    this.chart.data.labels.push(t); this.chart.data.datasets[0].data.push(v);
+    if (this.chart.data.labels.length > 50) { this.chart.data.labels.shift(); this.chart.data.datasets[0].data.shift(); }
     this.chart.update();
   }
 
-  async saveToHistory(manualClick = false) {
-    if (manualClick && !confirm("Are you sure you want to save the current data to history?")) return;
-    await this.syncProjectData(); // Sync manual edits & settings snapshot
-    await this.syncPointsData(); // Save all points (Measured & Preloading)
+  async saveToHistory(manual = false, saveAs = false) {
+    if (manual && !confirm(saveAs ? "Save as a new project?" : "Update the current project?")) return;
+    if (saveAs) { this.currentProject = null; }
 
-    if (!this.currentProject) return;
+    const projectSynced = await this.syncProjectData();
+    if (!projectSynced) {
+        if (manual) alert("Failed to save project metadata. Please ensure Ref. No. and Capacity are filled.");
+        return;
+    }
+
+    const pointsSynced = await this.syncPointsData();
+    if (!pointsSynced) {
+        if (manual) alert("Failed to save measurement data.");
+        return;
+    }
+
     try {
       const res = await fetch(`/api/calibration/projects/${this.currentProject.id}/save`, { method: 'PUT' });
-      if (res.ok) {
-        if (manualClick) alert("Project successfully saved to History!");
-        this.loadHistory();
-        if (manualClick) this.resetWorkspace(); // Force a clean slate for the next calibration
+      if (res.ok) { 
+        if (manual) alert(saveAs ? "Saved as new project!" : "Project updated!"); 
+        this.loadHistory(); 
+      } else {
+        if (manual) alert("Failed to finalize save. Please try again.");
       }
-    } catch (err) {
-      console.error('Failed to save to history:', err);
+    } catch (err) { 
+        console.error(err); 
+        if (manual) alert("An error occurred while saving.");
     }
+  }
+
+  async syncProjectData() {
+    const d = document.getElementById('t1-date')?.value, m = document.getElementById('t1-mode')?.value, n = document.getElementById('t1-ref-no')?.value, c = document.getElementById('t1-capacity')?.value, i = document.getElementById('t1-item')?.value, r = document.getElementById('t1-range')?.value, inc = document.getElementById('t1-increment')?.value, res = document.getElementById('t1-resolution')?.value, lm = document.getElementById('t1-lc-make')?.value, ls = document.getElementById('t1-lc-sn')?.value, im = document.getElementById('t1-ind-make')?.value, is = document.getElementById('t1-ind-sn')?.value, a = document.getElementById('t4-a')?.value, b = document.getElementById('t4-b')?.value, coeff_c = document.getElementById('t4-c')?.value, u = document.getElementById('t4-u')?.value, rm = document.getElementById('t4-model')?.value, rc = document.getElementById('t4-cap')?.value, rs = document.getElementById('t4-sn')?.value, rcert = document.getElementById('t4-cert')?.value, rd = document.getElementById('t4-date')?.value, tb = document.getElementById('t5-temp-b')?.value, ta = document.getElementById('t5-temp-a')?.value, hb = document.getElementById('t5-hum-b')?.value, ha = document.getElementById('t5-hum-a')?.value;
+    const clientName = document.getElementById('t1-client-name')?.value;
+    const clientAddress = document.getElementById('t1-client-address')?.value;
+    
+    if (!n || !c) return false;
+    const payload = { 
+      project_name: n, 
+      client_name: clientName,
+      client_address: clientAddress,
+      calibration_date: d, 
+      mode: m, 
+      capacity_kgf: parseFloat(c) || 0, 
+      instrument_name: i, 
+      range_text: r, 
+      lc_make: lm, 
+      lc_sn: ls, 
+      ind_make: im, 
+      ind_sn: is, 
+      increment: inc, 
+      serial_number: ls, 
+      resolution: res, 
+      coeff_a: parseFloat(a)||1, 
+      coeff_b: parseFloat(b)||0, 
+      coeff_c: parseFloat(coeff_c)||0, 
+      ref_unc: parseFloat(u)||0.02, 
+      ref_model: rm, 
+      ref_capacity: rc, 
+      ref_sn: rs, 
+      ref_cert: rcert, 
+      ref_date: rd, 
+      temperature_before: parseFloat(tb)||0, 
+      temperature_after: parseFloat(ta)||0, 
+      humidity_before: parseFloat(hb)||0, 
+      humidity_after: parseFloat(ha)||0, 
+      output_unit: this.currentUnit 
+    };
+    try {
+      if (this.currentProject) { await fetch(`/api/calibration/projects/${this.currentProject.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); Object.assign(this.currentProject, payload); }
+      else { const res = await fetch('/api/calibration/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const data = await res.json(); if(data.project_id) this.currentProject = { id: data.project_id, ...payload }; }
+      return true;
+    } catch(e) { console.error(e); return false; }
   }
 
   async syncPointsData() {
-    if (!this.currentProject) return;
-
-    const points = [];
-
-    // Add Preloading points
-    this.loggerData.preloading.forEach((row, idx) => {
-        points.push({
-            stage: 'Pre-loading',
-            target: row.target || 0,
-            m1: row.runs[0].m,
-            m2: row.runs[1].m,
-            m3: row.runs[2].m,
-            s1: row.runs[0].r,
-            s2: row.runs[1].r,
-            s3: row.runs[2].r,
-            idx: idx
-        });
-    });
-
-    // Add Measured points
-    this.loggerData.measured.forEach((row, idx) => {
-        points.push({
-            stage: 'Measured',
-            target: row.target,
-            m1: row.runs[0].m,
-            m2: row.runs[1].m,
-            m3: row.runs[2].m,
-            s1: row.runs[0].r,
-            s2: row.runs[1].r,
-            s3: row.runs[2].r,
-            idx: idx
-        });
-    });
-
-    try {
-        await fetch('/api/calibration/test-points/batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ project_id: this.currentProject.id, points })
-        });
-    } catch (e) {
-        console.error("Failed to sync points:", e);
-    }
+    if (!this.currentProject) return false;
+    const pts = [];
+    this.loggerData.preloading.forEach((r, i) => pts.push({ stage: 'Pre-loading', target: r.target || 0, m1: r.runs[0].m, m2: r.runs[1].m, m3: r.runs[2].m, s1: r.runs[0].r, s2: r.runs[1].r, s3: r.runs[2].r, idx: i }));
+    this.loggerData.measured.forEach((r, i) => pts.push({ stage: 'Measured', target: r.target, m1: r.runs[0].m, m2: r.runs[1].m, m3: r.runs[2].m, s1: r.runs[0].r, s2: r.runs[1].r, s3: r.runs[2].r, idx: i }));
+    try { 
+        const res = await fetch('/api/calibration/test-points/batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: this.currentProject.id, points: pts }) }); 
+        return res.ok;
+    } catch (e) { console.error(e); return false; }
   }
 
-  async loadHistory(filterText = '', archived = false) {
+  async loadHistory(filter = '', archived = false) {
     try {
-      const response = await fetch(`/api/calibration/history?archived=${archived}`);
-      let projects = await response.json();
-      const gridId = archived ? 'archive-grid' : 'history-grid';
-      const grid = document.getElementById(gridId);
-      if (!grid) return;
-
-      if (filterText) {
-        const lowerFilter = filterText.toLowerCase();
-        projects = projects.filter(p => 
-          (p.project_name || '').toLowerCase().includes(lowerFilter) ||
-          (p.serial_number || '').toLowerCase().includes(lowerFilter) ||
-          new Date(p.updated_at).toLocaleString().toLowerCase().includes(lowerFilter)
-        );
-      }
-
-      if (projects.length === 0) {
-        if (archived) {
-          grid.innerHTML = filterText ? '<p>No matching archived records found.</p>' : '<p>No archived data found.</p>';
-        } else {
-          grid.innerHTML = filterText ? '<p>No matching records found.</p>' : '<p>No history found. Complete a calibration and click "Save to History".</p>';
-        }
-        return;
-      }
-
+      const res = await fetch(`/api/calibration/history?archived=${archived}`); let projects = await res.json();
+      const grid = document.getElementById(archived ? 'archive-grid' : 'history-grid'); if (!grid) return;
+      if (filter) { const f = filter.toLowerCase(); projects = projects.filter(p => (p.project_name || '').toLowerCase().includes(f) || (p.serial_number || '').toLowerCase().includes(f)); }
+      if (projects.length === 0) { grid.innerHTML = '<p>No records found.</p>'; return; }
       window.appContext = this;
-      grid.innerHTML = projects.map(p => `
-        <button style="display:flex; flex-direction:column; padding: 15px; border: 1px solid #ccc; border-radius: 8px; background: #fff; text-align: left; cursor: pointer;" onclick="window.appContext.viewHistoryProject(${p.id})">
-          <strong style="font-size: 1.1em; color: #001D53; margin-bottom: 5px;">${p.project_name}</strong>
-          <span style="font-size: 0.85em; color: #555;">Date: ${new Date(p.updated_at).toLocaleString()}</span>
-          <span style="font-size: 0.85em; color: #555;">S/N: ${p.serial_number || 'N/A'}</span>
-          <span style="font-size: 0.85em; color: #555;">Capacity: ${p.capacity_kgf || 'N/A'} kgf</span>
-        </button>
-      `).join('');
-    } catch (err) {
-      console.error('Failed to load history:', err);
-    }
+      grid.innerHTML = projects.map(p => `<button style="display:flex; flex-direction:column; padding: 15px; border: 1px solid #ccc; border-radius: 8px; background: #fff; text-align: left; cursor: pointer;" onclick="window.appContext.viewHistoryProject(${p.id})"><strong style="font-size: 1.1em; color: #001D53; margin-bottom: 5px;">${p.project_name}</strong><span style="font-size: 0.85em; color: #555;">Date: ${new Date(p.updated_at).toLocaleString()}</span><span style="font-size: 0.85em; color: #555;">S/N: ${p.serial_number || 'N/A'}</span></button>`).join('');
+    } catch (err) { console.error(err); }
   }
 
-  async viewHistoryProject(projectId) {
+  async viewHistoryProject(id) {
     try {
-      // 1. Fetch Processed Historical Data
-      const res = await fetch(`/api/calibration/process/${projectId}`);
-      const data = await res.json();
-      const project = data.metadata;
-      const results = data.results;
+      const res = await fetch(`/api/calibration/process/${id}`); const d = await res.json();
+      const p = d.metadata, r = d.results;
+      const setTxt = (id, v) => { if(document.getElementById(id)) document.getElementById(id).textContent = v || 'N/A'; };
+      setTxt('hist-t1-date', p.calibration_date ? new Date(p.calibration_date).toLocaleDateString() : 'N/A');
+      setTxt('hist-client-name', p.client_name); setTxt('hist-client-address', p.client_address);
+      setTxt('hist-t1-mode', p.mode); setTxt('hist-t1-ref-no', p.project_name); setTxt('hist-t1-capacity', (p.capacity_kgf || '0') + ' kgf');
+      setTxt('hist-t1-item', p.instrument_name); setTxt('hist-t1-range', p.range_text); setTxt('hist-t1-lc-make', p.lc_make); setTxt('hist-t1-lc-sn', p.lc_sn); setTxt('hist-t1-ind-make', p.ind_make); setTxt('hist-t1-ind-sn', p.ind_sn); setTxt('hist-t1-increment', p.increment); setTxt('hist-t1-resolution', p.resolution || '0.01');
+      setTxt('hist-t5-temp-b', p.temperature_before); setTxt('hist-t5-temp-a', p.temperature_after); setTxt('hist-t5-hum-b', p.humidity_before); setTxt('hist-t5-hum-a', p.humidity_after);
+      setTxt('hist-t4-model', p.ref_model); setTxt('hist-t4-cap', p.ref_capacity); setTxt('hist-t4-sn', p.ref_sn); setTxt('hist-t4-cert', p.ref_cert); setTxt('hist-t4-date', p.ref_date); setTxt('hist-t4-u', p.ref_unc); setTxt('hist-t4-a', p.coeff_a); setTxt('hist-t4-b', p.coeff_b); setTxt('hist-t4-c', p.coeff_c);
+      const pg = {}; d.preloading.forEach(x => { if(!pg[x.measurement_sequence]) pg[x.measurement_sequence] = { target: x.target_value_kgf || 0, runs: [{m:0,r:0},{m:0,r:0},{m:0,r:0}] }; pg[x.measurement_sequence].runs[x.series_number-1] = { m: x.machine_indicated_kgf ?? 0, r: x.raw_reading_mvv || 0 }; });
+      this.currentHistoricalData = { 
+        id: id,
+        is_archived: p.is_archived === 1, 
+        preloading: Object.keys(pg).sort((a,b)=>a-b).map(k=>pg[k]), 
+        measured: r.map((x,i) => {
+          const u = p.output_unit || 'kgf', s = this.unitConstants[u] || 0.00980665;
+          const runs = [{ m: x.series1_m ?? x.targetForceKgf, r: x.series1_mvv || 0 }, { m: x.series2_m ?? x.targetForceKgf, r: x.series2_mvv || 0 }, { m: x.series3_m ?? x.targetForceKgf, r: x.series3_mvv || 0 }];
+          const am = runs.map(z=>z.m).filter(z=>z!==0), ar = runs.map(z=>z.r).filter(z=>z!==0);
+          return { point: i, target: x.targetForceKgf || 0, runs, meanIndicatedForce: am.length?am.reduce((a,b)=>a+b)/am.length:0, meanRawDeflection: ar.length?ar.reduce((a,b)=>a+b)/ar.length:0, mean: x.meanNetDeflection || 0, meanForce: (x.meanForceKn || 0) / s, netValues: x.netValues || [0,0,0], runForcesKn: x.runForcesKn || [0,0,0], uncertainty: x.expandedUncertaintyPercent || 0, class: x.classification || 'N/A' };
+      })};
+      this.calculateFullSuite('hist-'); this.renderReplicaTables('hist-');
+      document.getElementById('modal-history-list').style.display = 'none'; document.getElementById('modal-archive-list').style.display = 'none'; document.getElementById('modal-history-view').style.display = 'flex';
+      document.getElementById('history-view-title').textContent = this.currentHistoricalData.is_archived ? 'Archived Data' : 'Historical Data';
+      document.getElementById('btn-hist-archive').style.display = this.currentHistoricalData.is_archived ? 'none' : 'inline-block';
+      document.getElementById('btn-hist-unarchive').style.display = this.currentHistoricalData.is_archived ? 'inline-block' : 'none';
+      document.getElementById('btn-hist-excel').style.display = this.currentHistoricalData.is_archived ? 'none' : 'inline-block';
+      document.getElementById('btn-hist-print').style.display = this.currentHistoricalData.is_archived ? 'none' : 'inline-block';
+      if (document.getElementById('btn-hist-load-demo')) document.getElementById('btn-hist-load-demo').style.display = this.currentHistoricalData.is_archived ? 'none' : 'inline-block';
+    } catch (err) { console.error(err); }
+  }
 
-      // 2. Fill Table 1 (Historical Metadata)
-      document.getElementById('hist-t1-date').textContent = project.calibration_date ? new Date(project.calibration_date).toLocaleDateString() : 'N/A';
-      document.getElementById('hist-t1-mode').textContent = project.mode || 'N/A';
-      document.getElementById('hist-t1-ref-no').textContent = project.project_name || 'N/A';
-      document.getElementById('hist-t1-capacity').textContent = (project.capacity_kgf || '0') + ' kgf';
-      document.getElementById('hist-t1-item').textContent = project.instrument_name || 'N/A';
-      document.getElementById('hist-t1-range').textContent = project.range_text || 'N/A';
-      document.getElementById('hist-t1-make').textContent = project.make_model || 'N/A';
-      document.getElementById('hist-t1-increment').textContent = project.increment || 'N/A';
-      document.getElementById('hist-t1-sn').textContent = project.serial_number || 'N/A';
-      document.getElementById('hist-t1-resolution').textContent = project.resolution || '0.01';
+  async archiveHistoricalRecord() {
+    if (!this.currentHistoricalData || !this.currentHistoricalData.id) return;
+    if (!confirm("Are you sure you want to archive this record?")) return;
+    try {
+        const res = await fetch(`/api/calibration/projects/${this.currentHistoricalData.id}/archive`, { method: 'PUT' });
+        if (res.ok) { 
+            alert("Record archived."); 
+            document.getElementById('modal-history-view').style.display = 'none';
+            document.getElementById('modal-history-list').style.display = 'flex';
+            this.loadHistory(); 
+        }
+    } catch (e) { console.error(e); }
+  }
 
-      // 3. Fill Environmental (Historical Snapshot)
-      document.getElementById('hist-t5-temp-b').textContent = project.temperature_before || '-';
-      document.getElementById('hist-t5-temp-a').textContent = project.temperature_after || '-';
-      document.getElementById('hist-t5-hum-b').textContent = project.humidity_before || '-';
-      document.getElementById('hist-t5-hum-a').textContent = project.humidity_after || '-';
+  async unarchiveHistoricalRecord() {
+    if (!this.currentHistoricalData || !this.currentHistoricalData.id) return;
+    if (!confirm("Restore this record from archive?")) return;
+    try {
+        const res = await fetch(`/api/calibration/projects/${this.currentHistoricalData.id}/unarchive`, { method: 'PUT' });
+        if (res.ok) { 
+            alert("Record restored."); 
+            document.getElementById('modal-history-view').style.display = 'none';
+            document.getElementById('modal-archive-list').style.display = 'flex';
+            this.loadHistory('', true); 
+        }
+    } catch (e) { console.error(e); }
+  }
 
-      // 4. Fill Transducer Coefficients (Historical Snapshot)
-      document.getElementById('hist-t4-model').textContent = project.ref_model || 'Saved Standard';
-      document.getElementById('hist-t4-cap').textContent = project.ref_capacity || 'N/A';
-      document.getElementById('hist-t4-sn').textContent = project.ref_sn || 'N/A';
-      document.getElementById('hist-t4-cert').textContent = project.ref_cert || 'N/A';
-      document.getElementById('hist-t4-date').textContent = project.ref_date || 'N/A';
-      document.getElementById('hist-t4-u').textContent = project.ref_unc ?? '0.02';
-      document.getElementById('hist-t4-a').textContent = project.coeff_a ?? '1.0';
-      document.getElementById('hist-t4-b').textContent = project.coeff_b ?? '0.0';
-      document.getElementById('hist-t4-c').textContent = project.coeff_c ?? '0.0';
-
-      // 5. Map Historical Points to loggerData structure
-      const preGrouped = {};
-      data.preloading.forEach(p => {
-        const seq = p.measurement_sequence;
-        if (!preGrouped[seq]) preGrouped[seq] = { target: p.target_value_kgf || 0, runs: [{m:0,r:0},{m:0,r:0},{m:0,r:0}] };
-        preGrouped[seq].runs[p.series_number - 1] = { m: p.machine_indicated_kgf ?? 0, r: p.raw_reading_mvv || 0 };
-      });
-
-      this.currentHistoricalData = {
-        preloading: Object.keys(preGrouped).sort((a,b) => a-b).map(k => preGrouped[k]),
-        measured: results.map((r, idx) => {
-            const unit = project.output_unit || 'kgf';
-            const scale = this.unitConstants[unit] || 0.00980665;
-            
-            // Calculate raw averages for Table 3
-            const runs = [
-                { m: r.series1_m ?? r.targetForceKgf, r: r.series1_mvv || 0 },
-                { m: r.series2_m ?? r.targetForceKgf, r: r.series2_mvv || 0 },
-                { m: r.series3_m ?? r.targetForceKgf, r: r.series3_mvv || 0 }
-            ];
-            const activeMs = runs.map(run => run.m).filter(m => m !== 0);
-            const activeRs = runs.map(run => run.r).filter(r => r !== 0);
-            const meanIndicatedForce = activeMs.length > 0 ? activeMs.reduce((acc, v) => acc + v, 0) / activeMs.length : 0;
-            const meanRawDeflection = activeRs.length > 0 ? activeRs.reduce((acc, v) => acc + v, 0) / activeRs.length : 0;
-
-            return {
-                point: idx,
-                target: r.targetForceKgf || 0,
-                runs: runs,
-                meanIndicatedForce: meanIndicatedForce,
-                meanRawDeflection: meanRawDeflection,
-                mean: r.meanNetDeflection || 0,
-                meanForce: (r.meanForceKn || 0) / scale,
-                netValues: r.netValues || [0,0,0],
-                runForcesKn: r.runForcesKn || [0,0,0],
-                uncertainty: r.expandedUncertaintyPercent || 0,
-                class: r.classification || 'N/A'
-            };
-        })
-      };
-
-      this.calculateFullSuite('hist-');
-      this.renderReplicaTables('hist-');
-
-      // 6. Modal Toggling
-      document.getElementById('modal-history-list').style.display = 'none';
-      document.getElementById('modal-archive-list').style.display = 'none';
-      document.getElementById('modal-history-view').style.display = 'block';
-
-      // Update View Title and Buttons
-      const isArchived = project.is_archived === 1;
-      this.currentHistoricalData.is_archived = isArchived;
-      document.getElementById('history-view-title').textContent = isArchived ? 'Archived Calibration Data (Read-Only)' : 'Historical Calibration Data (Read-Only)';
-      
-      const btnArchive = document.getElementById('btn-hist-archive');
-      const btnUnarchive = document.getElementById('btn-hist-unarchive');
-      const btnDelete = document.getElementById('btn-hist-delete');
-      if (btnArchive) btnArchive.style.display = isArchived ? 'none' : 'inline-block';
-      if (btnUnarchive) btnUnarchive.style.display = isArchived ? 'inline-block' : 'none';
-
-      // 7. Action Button Overrides (scoped to this project)
-      document.getElementById('btn-hist-cert').onclick = async () => {
-        if (!confirm(`Are you sure you want to generate a certificate for ${project.project_name}?`)) return;
-        alert("Generating Certificate for " + project.project_name);
-        window.location.href = `/api/export/certificate/${project.id}`;
-      };
-
-      document.getElementById('btn-hist-excel').onclick = () => {
-        if (!confirm(`Are you sure you want to export ${project.project_name} to an Excel report?`)) return;
-        alert("Populating Legacy Excel Template...");
-        window.location.href = `/api/export/excel/${project.id}`;
-      };
-
-      document.getElementById('btn-hist-csv').onclick = () => {
-        if (results.length === 0) return;
-        if (!confirm(`Are you sure you want to export ${project.project_name} to CSV?`)) return;
-        let csvContent = "data:text/csv;charset=utf-8,Target (kgf),Run 1 (mV/V),Run 2 (mV/V),Run 3 (mV/V),Mean (kN),Repeatability,Uncertainty,Classification\n";
-        results.forEach(r => {
-          csvContent += [r.target_force_kgf, r.series1_mvv.toFixed(6), r.series2_mvv.toFixed(6), r.series3_mvv.toFixed(6), r.mean_force_kn.toFixed(6), r.repeatability_kn.toFixed(6), r.uncertainty_kn.toFixed(6), r.classification].join(",") + "\n";
+  loadHistoricalAsDemo() {
+    if (!this.currentHistoricalData) return;
+    if (!confirm("Load this historical data into the live workspace?")) return;
+    this.demoMode = true;
+    this.currentProject = null; 
+    
+    const fetchMetadata = async () => {
+        const res = await fetch(`/api/calibration/process/${this.currentHistoricalData.id}`);
+        const d = await res.json();
+        const p = d.metadata;
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) { el.value = val; el.dispatchEvent(new Event('input')); } };
+        setVal('t1-ref-no', p.project_name); setVal('t1-capacity', p.capacity_kgf);
+        setVal('t1-item', p.instrument_name); setVal('t1-range', p.range_text);
+        setVal('t1-lc-make', p.lc_make); setVal('t1-lc-sn', p.lc_sn);
+        setVal('t1-ind-make', p.ind_make); setVal('t1-ind-sn', p.ind_sn);
+        setVal('t1-increment', p.increment); setVal('t1-resolution', p.resolution);
+        setVal('t1-client-name', p.client_name); setVal('t1-client-address', p.client_address);
+        setVal('t4-a', p.coeff_a); setVal('t4-b', p.coeff_b); setVal('t4-c', p.coeff_c); setVal('t4-u', p.ref_unc);
+        setVal('t5-temp-b', p.temperature_before); setVal('t5-temp-a', p.temperature_after);
+        setVal('t5-hum-b', p.humidity_before); setVal('t5-hum-a', p.humidity_after);
+        
+        this.loggerData.preloading = this.currentHistoricalData.preloading.map(x => JSON.parse(JSON.stringify(x)));
+        this.loggerData.measured = this.currentHistoricalData.measured.map(x => {
+            return { point: x.point, target: x.target, runs: JSON.parse(JSON.stringify(x.runs)), mean: x.mean, meanForce: x.meanForce, uncertainty: x.uncertainty, class: x.class };
         });
-        const link = document.createElement("a");
-        link.setAttribute("href", encodeURI(csvContent));
-        link.setAttribute("download", `historical_results_${project.id}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      };
+        document.getElementById('modal-history-view').style.display = 'none';
+        this.renderLogger();
+        alert("Historical data loaded as demo.");
+    };
+    fetchMetadata();
+  }
 
-      document.getElementById('btn-hist-print').onclick = () => {
-        if (confirm("Prepare document for printing?")) {
-            window.print();
-        }
-      };
-
-      if (btnArchive) btnArchive.onclick = async () => {
-        if (confirm(`Move project ${project.project_name} to Archive?`)) {
-            const res = await fetch(`/api/calibration/projects/${project.id}/archive`, { method: 'PUT' });
-            if (res.ok) {
-              document.getElementById('modal-history-view').style.display = 'none';
-              document.getElementById('modal-history-list').style.display = 'block';
-              this.loadHistory();
-            }
-        }
-      };
-
-      if (btnUnarchive) btnUnarchive.onclick = async () => {
-        if (confirm(`Restore project ${project.project_name} from Archive?`)) {
-            const res = await fetch(`/api/calibration/projects/${project.id}/unarchive`, { method: 'PUT' });
-            if (res.ok) {
-              document.getElementById('modal-history-view').style.display = 'none';
-              document.getElementById('modal-archive-list').style.display = 'block';
-              this.loadHistory('', true);
-            }
-        }
-      };
-
-    } catch (err) {
-      console.error('Failed to view history project:', err);
-    }
+  exportHistoricalExcel() {
+    if (!this.currentHistoricalData || !this.currentHistoricalData.id) return;
+    if (!confirm("Export this record to Excel?")) return;
+    window.location.href = `/api/export/excel/${this.currentHistoricalData.id}`;
   }
 
   async loadProjects() {
     try {
-      const response = await fetch('/api/calibration/projects');
-      const projects = await response.json();
+      const res = await fetch('/api/calibration/projects'); const projects = await res.json();
       if (projects.length > 0) {
-        this.currentProject = projects[projects.length - 1]; // Select latest
+        this.currentProject = projects[projects.length - 1];
+        const setVal = (id, v) => { if(document.getElementById(id)) document.getElementById(id).value = v || ''; };
+        setVal('t1-ref-no', this.currentProject.project_name); setVal('t1-item', this.currentProject.instrument_name); 
+        setVal('t1-lc-sn', this.currentProject.lc_sn); setVal('t1-ind-sn', this.currentProject.ind_sn); 
+        setVal('t1-lc-make', this.currentProject.lc_make); setVal('t1-ind-make', this.currentProject.ind_make); 
+        setVal('t1-capacity', this.currentProject.capacity_text || (this.currentProject.capacity_kgf ? this.currentProject.capacity_kgf + ' kgf' : ''));
+        setVal('t1-client-name', this.currentProject.client_name); setVal('t1-client-address', this.currentProject.client_address);
+        if (document.getElementById('t1-date')) document.getElementById('t1-date').value = this.currentProject.calibration_date ? this.currentProject.calibration_date.split('T')[0] : new Date().toISOString().split('T')[0];
+        setVal('t1-mode', this.currentProject.mode || 'Compression'); setVal('t1-range', this.currentProject.range_text); setVal('t1-increment', this.currentProject.increment); setVal('t1-resolution', this.currentProject.resolution);
         
-        // Update Table 1: Description of the Instrument
-        const refNoInput = document.getElementById('t1-ref-no');
-        const itemInput = document.getElementById('t1-item');
-        const snInput = document.getElementById('t1-sn');
-        const capacityInput = document.getElementById('t1-capacity');
-        
-        const dateInput = document.getElementById('t1-date');
-        const modeInput = document.getElementById('t1-mode');
-        const rangeInput = document.getElementById('t1-range');
-        const makeInput = document.getElementById('t1-make');
-        const incrementInput = document.getElementById('t1-increment');
-        const resolutionInput = document.getElementById('t1-resolution');
-
-        if (refNoInput) refNoInput.value = this.currentProject.project_name || '';
-        if (itemInput) itemInput.value = this.currentProject.instrument_name || '';
-        if (snInput) snInput.value = this.currentProject.serial_number || '';
-        if (capacityInput) capacityInput.value = this.currentProject.capacity_kgf ? this.currentProject.capacity_kgf + ' kgf' : '';
-
-        if (dateInput) {
-            if (this.currentProject.calibration_date) {
-                dateInput.value = this.currentProject.calibration_date.split('T')[0];
-            } else {
-                dateInput.value = new Date().toISOString().split('T')[0];
-            }
+        if (this.currentProject.standard_id) {
+           const sel = document.getElementById('lc-selector');
+           if (sel) { sel.value = this.currentProject.standard_id; }
         }
-        if (modeInput) modeInput.value = this.currentProject.mode || 'Compression';
-        if (rangeInput) rangeInput.value = this.currentProject.range_text || '';
-        if (makeInput) makeInput.value = this.currentProject.make_model || '';
-        if (incrementInput) incrementInput.value = this.currentProject.increment || '';
-        if (resolutionInput) resolutionInput.value = this.currentProject.resolution || '';
-
-      }
-    } catch (err) {
-      console.error('Failed to load projects:', err);
-    }
-  }
-
-  openManualEntry(project, results) {
-    const modal = document.getElementById('modal-manual-entry');
-    const info = document.getElementById('me-project-info');
-    const tbody = document.getElementById('me-table-body');
-    
-    info.textContent = `Project: ${project.project_name} (${project.client_name})`;
-    tbody.innerHTML = '';
-
-    // If we have existing results, populate them
-    if (results && results.length > 0) {
-      results.forEach(r => this.addManualEntryRow(r.target_force_kgf, r.series1_mvv, r.series2_mvv, r.series3_mvv));
-    } else {
-      // Default empty rows
-      [10, 20, 30, 40, 50].forEach(t => this.addManualEntryRow(t, 0, 0, 0));
-    }
-
-    document.getElementById('btn-me-add-row').onclick = () => this.addManualEntryRow(0, 0, 0, 0);
-    document.getElementById('btn-me-save').onclick = () => this.saveManualEntry(project.id);
-    document.getElementById('close-manual-entry').onclick = () => modal.style.display = 'none';
-
-    modal.style.display = 'block';
-  }
-
-  addManualEntryRow(target = 0, s1 = 0, s2 = 0, s3 = 0) {
-    const tbody = document.getElementById('me-table-body');
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><input type="number" class="me-target" value="${target}" style="width: 80px;"></td>
-      <td><input type="number" step="0.000001" class="me-s1" value="${s1}" style="width: 120px;"></td>
-      <td><input type="number" step="0.000001" class="me-s2" value="${s2}" style="width: 120px;"></td>
-      <td><input type="number" step="0.000001" class="me-s3" value="${s3}" style="width: 120px;"></td>
-      <td><button onclick="this.parentElement.parentElement.remove()" style="background:#001D53; padding: 2px 8px;">&times;</button></td>
-    `;
-    tbody.appendChild(tr);
-  }
-
-  async saveManualEntry(projectId) {
-    const rows = document.querySelectorAll('#me-table-body tr');
-    const points = [];
-    rows.forEach(row => {
-      points.push({
-        target: parseFloat(row.querySelector('.me-target').value),
-        s1: parseFloat(row.querySelector('.me-s1').value),
-        s2: parseFloat(row.querySelector('.me-s2').value),
-        s3: parseFloat(row.querySelector('.me-s3').value)
-      });
-    });
-
-    try {
-      const res = await fetch('/api/calibration/test-points/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId, points })
-      });
-
-      if (res.ok) {
-        alert("Data saved successfully. You can now export to Excel or view results.");
-        document.getElementById('modal-manual-entry').style.display = 'none';
-        this.viewHistoryProject(projectId); // Refresh the view
-      } else {
-        alert("Failed to save data.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Error saving data.");
-    }
-  }
-
-  // --- Load Cell & Unit Integration ---
-
-  async initLoadCellSelector() {
-    try {
-      const res = await fetch('/api/config/load-cells');
-      this.loadCells = await res.json();
-      
-      const sel = document.getElementById('lc-selector');
-      sel.innerHTML = '<option value="">-- Select Standard --</option>';
-      this.loadCells.forEach(lc => {
-        sel.innerHTML += `<option value="${lc.id}">${lc.model} (${lc.capacity})</option>`;
-      });
-
-      sel.onchange = (e) => {
-        const selected = this.loadCells.find(lc => lc.id == e.target.value);
-        if (selected) {
-          document.getElementById('set-coeff-a').value = selected.coeff_a;
-          document.getElementById('set-coeff-b').value = selected.coeff_b;
-          document.getElementById('set-coeff-c').value = selected.coeff_c;
-          document.getElementById('set-ref-unc').value = selected.uncertainty;
-
-          // Update Table 4: Force Transducer Info
-          const elModel = document.getElementById('t4-model');
-          const elCap = document.getElementById('t4-cap');
-          const elSn = document.getElementById('t4-sn');
-          const elCert = document.getElementById('t4-cert');
-          const elU = document.getElementById('t4-u');
-          const elA = document.getElementById('t4-a');
-          const elB = document.getElementById('t4-b');
-          const elC = document.getElementById('t4-c');
-          const elDate = document.getElementById('t4-date');
-
-          if (elModel) elModel.value = selected.model || '';
-          if (elCap) elCap.value = selected.capacity || '';
-          if (elSn) elSn.value = selected.sn || '';
-          if (elCert) elCert.value = selected.cert_no || 'N/A';
-          if (elU) elU.value = selected.uncertainty || '';
-          if (elA) elA.value = selected.coeff_a || '';
-          if (elB) elB.value = selected.coeff_b || '';
-          if (elC) elC.value = selected.coeff_c || '';
-          if (elDate) elDate.value = selected.cal_date || 'N/A';
-
-          alert(`Coefficients loaded for ${selected.model}`);
-          this.renderLogger(); 
+        if (this.currentProject.output_unit) {
+           this.setSystemUnit(this.currentProject.output_unit);
+        } else {
+           this.setSystemUnit('kgf');
         }
-      };
-    } catch (e) {
-      console.error('Failed to load sensor DB', e);
-    }
+      }
+    } catch (err) { console.error(err); }
   }
 
   setSystemUnit(unit) {
@@ -1296,85 +701,91 @@ class DMP41CalibrationApp {
       btn.style.background = btn.dataset.unit === unit ? '#001D53' : '#eee';
       btn.style.color = btn.dataset.unit === unit ? 'white' : 'black';
     });
-    
-    // Update live monitor label
     const label = document.getElementById('reading-unit');
     if (label) label.textContent = unit;
-
-    // Trigger re-calculation of everything
-    this.renderLogger();
-  }
-
-  addTestPoint(tableType) {
-    const newPoint = {
-      target: 0,
-      runs: [{ m: 0, r: 0 }, { m: 0, r: 0 }, { m: 0, r: 0 }]
-    };
-
-    if (tableType === 'measured') {
-      newPoint.point = this.loggerData.measured.length;
-      newPoint.mean = 0;
-      newPoint.meanForce = 0;
-      newPoint.uncertainty = 0;
-      newPoint.class = 'N/A';
-      this.loggerData.measured.push(newPoint);
-    } else {
-      // Insert before the last element (which is always Max Cap)
-      const lastIndex = this.loggerData.preloading.length - 1;
-      this.loggerData.preloading.splice(lastIndex, 0, newPoint);
-    }
+    
+    // Dynamically update UI table headers
+    document.querySelectorAll('.sys-unit').forEach(el => {
+      el.textContent = unit;
+    });
 
     this.renderLogger();
-  }
-
-  // --- Native Logger Methods ---
-
-  renderLogger() {
-    this.renderReplicaTables('');
   }
 
   formatCellValue(val, isTarget = false, isReading = false) {
-    if (val === 0 || val === "0" || val === null || val === undefined) {
-      return ""; // Return empty string for placeholders
-    }
-    return isReading ? parseFloat(val).toFixed(6) : parseFloat(val);
+    if (val === null || val === undefined || val === "") return "- -";
+    return isReading ? parseFloat(val).toFixed(5) : parseFloat(val);
   }
 
-  renderReplicaTables(prefix = '') {
-    // Only calculate suite for main view
-    if (prefix === '') {
-      this.calculateFullSuite();
+  initChart() {
+    const ctx = document.getElementById('chart-readings');
+    if (!ctx) return;
+    this.chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'mV/V Reading', data: [], borderColor: '#001D53', tension: 0.1, fill: false }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { beginAtZero: false } }, animation: false }
+    });
+  }
+
+  async syncLoggerToExcel() {
+    if (!this.currentProject) { alert("Save project first."); return; }
+    if (!confirm("Export to Excel?")) return;
+    await this.saveToHistory();
+    window.location.href = `/api/export/excel/${this.currentProject.id}`;
+  }
+
+  addTestPoint(tableType) {
+    const newPoint = { target: 0, runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }] };
+    if (tableType === 'measured') {
+      newPoint.point = this.loggerData.measured.length;
+      newPoint.mean = 0; newPoint.meanForce = 0; newPoint.uncertainty = 0; newPoint.class = 'N/A';
+      this.loggerData.measured.push(newPoint);
+    } else {
+      const lastIndex = this.loggerData.preloading.length - 1;
+      this.loggerData.preloading.splice(lastIndex, 0, newPoint);
     }
-    
+    this.renderLogger();
+  }
+
+  deleteTestPoint(tableType) {
+    if (tableType === 'measured') {
+      if (this.loggerData.measured.length <= 1) { alert("Cannot delete base point."); return; }
+      const maxIdx = this.loggerData.measured.length - 1;
+      const idxStr = prompt(`Enter test point index (1 to ${maxIdx}):`);
+      if (!idxStr) return;
+      const idx = parseInt(idxStr, 10);
+      if (isNaN(idx) || idx < 1 || idx > maxIdx) { alert("Invalid index."); return; }
+      this.loggerData.measured.splice(idx, 1);
+      this.loggerData.measured.forEach((p, i) => { p.point = i; });
+    } else {
+      if (this.loggerData.preloading.length <= 2) { alert("Cannot delete base points."); return; }
+      const lastIndex = this.loggerData.preloading.length - 1;
+      const idxStr = prompt(`Enter test point index (1 to ${lastIndex - 1}):`);
+      if (!idxStr) return;
+      const idx = parseInt(idxStr, 10);
+      if (isNaN(idx) || idx < 1 || idx >= lastIndex) { alert("Invalid index."); return; }
+      this.loggerData.preloading.splice(idx, 1);
+    }
+    this.renderLogger();
+  }
+
+  renderLogger() { this.renderReplicaTables(''); }
+
+  renderReplicaTables(prefix = '') {
+    if (prefix === '') this.calculateFullSuite();
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
     if (!data) return;
-
     const targetConst = this.unitConstants[this.currentUnit];
 
-    // Table 2: Pre-loading
     const t2Body = document.getElementById(`${prefix}t2-body`);
     if (t2Body) {
       t2Body.innerHTML = data.preloading.map((row, idx) => {
         const getCls = (v) => v === "" ? 'l-cell-t2 placeholder-dull' : 'l-cell-t2';
-        const v1m = this.formatCellValue(row.runs[0].m);
-        const v1r = this.formatCellValue(row.runs[0].r, false, true);
-        const v2m = this.formatCellValue(row.runs[1].m);
-        const v2r = this.formatCellValue(row.runs[1].r, false, true);
-        const v3m = this.formatCellValue(row.runs[2].m);
-        const v3r = this.formatCellValue(row.runs[2].r, false, true);
-
+        const v1m = this.formatCellValue(row.runs[0].m); const v1r = this.formatCellValue(row.runs[0].r, false, true);
+        const v2m = this.formatCellValue(row.runs[1].m); const v2r = this.formatCellValue(row.runs[1].r, false, true);
+        const v3m = this.formatCellValue(row.runs[2].m); const v3r = this.formatCellValue(row.runs[2].r, false, true);
         const rowLabel = idx === 0 ? '0.0' : (idx === data.preloading.length - 1 ? 'Max Cap' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th'));
-
-        return `
-        <tr>
-          <td>${rowLabel}</td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td>
-          <td class="selectable" data-tab="2" data-row="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td>
-        </tr>`;
+        return `<tr><td>${rowLabel}</td><td class="selectable" data-tab="2" data-row="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td><td class="selectable" data-tab="2" data-row="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td><td class="selectable" data-tab="2" data-row="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td><td class="selectable" data-tab="2" data-row="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td><td class="selectable" data-tab="2" data-row="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td><td class="selectable" data-tab="2" data-row="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td></tr>`;
       }).join('');
     }
 
@@ -1383,71 +794,28 @@ class DMP41CalibrationApp {
       t3Body.innerHTML = data.measured.map((row, idx) => {
         const getCls = (v) => v === "" ? 'l-cell-t3 placeholder-dull' : 'l-cell-t3';
         const vt = this.formatCellValue(row.target, true);
-        const v1m = this.formatCellValue(row.runs[0].m);
-        const v1r = this.formatCellValue(row.runs[0].r, false, true);
-        const v2m = this.formatCellValue(row.runs[1].m);
-        const v2r = this.formatCellValue(row.runs[1].r, false, true);
-        const v3m = this.formatCellValue(row.runs[2].m);
-        const v3r = this.formatCellValue(row.runs[2].r, false, true);
-
-        return `
-        <tr>
-          <td>${idx === 0 ? '0.0' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th')}</td>
-          <td><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${vt === "" ? 'l-t placeholder-dull' : 'l-t'}" data-idx="${idx}" value="${vt}" placeholder="- -"></td>
-          
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td>
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td>
-          
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td>
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td>
-          
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td>
-          <td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td>
-          
-          <td class="calculated" id="${prefix}t3-meanforce-${idx}">${row.meanIndicatedForce ? row.meanIndicatedForce.toFixed(this.currentUnit === 'kN' ? 6 : 3) : '- -'}</td>
-          <td class="calculated" id="${prefix}t3-meandef-${idx}">${row.meanRawDeflection ? row.meanRawDeflection.toFixed(6) : '- -'}</td>
-        </tr>`;
+        const v1m = this.formatCellValue(row.runs[0].m); const v1r = this.formatCellValue(row.runs[0].r, false, true);
+        const v2m = this.formatCellValue(row.runs[1].m); const v2r = this.formatCellValue(row.runs[1].r, false, true);
+        const v3m = this.formatCellValue(row.runs[2].m); const v3r = this.formatCellValue(row.runs[2].r, false, true);
+        return `<tr><td>${idx === 0 ? '0.0' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th')}</td><td><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${vt === "" ? 'l-t placeholder-dull' : 'l-t'}" data-idx="${idx}" value="${vt}" placeholder="- -"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td><td class="calculated" id="${prefix}t3-meanforce-${idx}">${row.meanIndicatedForce ? row.meanIndicatedForce.toFixed(2) : '- -'}</td><td class="calculated" id="${prefix}t3-meandef-${idx}">${row.meanRawDeflection ? row.meanRawDeflection.toFixed(5) : '- -'}</td></tr>`;
       }).join('');
     }
 
-    this.renderTable6(prefix);
-    this.renderTable7(prefix);
-    this.renderTable8(prefix);
-    this.renderTable9(prefix);
+    this.renderTable6(prefix); this.renderTable7(prefix); this.renderTable8(prefix); this.renderTable9(prefix);
 
-    // Attach listeners to all inputs (only for non-historical)
     if (prefix === '') {
       document.querySelectorAll('.l-cell-t2, .l-cell-t3, .l-t, .env-input').forEach(el => {
         el.oninput = (e) => {
-          const valStr = e.target.value.trim();
-          const val = (valStr === "- -" || valStr === "") ? 0 : (parseFloat(valStr) || 0);
-          
-          if (el.classList.contains('l-t')) {
-              const idx = e.target.dataset.idx;
-              this.loggerData.measured[idx].target = val;
-              this.calculateFullSuite();
-          } else if (el.classList.contains('env-input')) {
-              this.calculateFullSuite();
-          } else {
+          const valStr = e.target.value.trim(); let val = (valStr !== "- -" && valStr !== "") ? parseFloat(valStr) : null;
+          if (el.classList.contains('l-t')) { this.loggerData.measured[e.target.dataset.idx].target = val; this.calculateFullSuite(); }
+          else if (el.classList.contains('env-input')) { this.calculateFullSuite(); }
+          else {
               const { idx, row, run, type, tab } = e.target.parentElement.dataset;
-              if (tab === "2") {
-                  this.loggerData.preloading[row].runs[run-1][type] = val;
-                  this.calculateFullSuite();
-                  // When Table 2 (Zeroes) change, all Table 3 calculated cells must update
-                  this.loggerData.measured.forEach((_, i) => this.updateRowUI(i));
-              }
-              else if (tab === "3") {
-                this.loggerData.measured[idx].runs[run-1][type] = val;
-                this.calculateFullSuite();
-                this.updateRowUI(idx);
-              }
+              if (tab === "2") { this.loggerData.preloading[row].runs[run-1][type] = val; this.calculateFullSuite(); this.loggerData.measured.forEach((_, i) => this.updateRowUI(i)); }
+              else if (tab === "3") { this.loggerData.measured[idx].runs[run-1][type] = val; this.calculateFullSuite(); this.updateRowUI(idx); }
           }
         };
-        el.onfocus = () => {
-          if (this.selectedCell) this.selectedCell.classList.remove('selected-cell');
-          this.selectedCell = el.parentElement;
-          this.selectedCell.classList.add('selected-cell');
-        };
+        el.onfocus = () => { if (this.selectedCell) this.selectedCell.classList.remove('selected-cell'); this.selectedCell = el.parentElement; this.selectedCell.classList.add('selected-cell'); };
       });
     }
   }
@@ -1456,341 +824,153 @@ class DMP41CalibrationApp {
     const row = this.loggerData.measured[idx];
     const forceEl = document.getElementById(`t3-meanforce-${idx}`);
     const defEl = document.getElementById(`t3-meandef-${idx}`);
-    if (forceEl) forceEl.textContent = (row.meanIndicatedForce || 0).toFixed(this.currentUnit === 'kN' ? 6 : 3);
-    if (defEl) defEl.textContent = (row.meanRawDeflection || 0).toFixed(6);
+    if (forceEl) forceEl.textContent = (row.meanIndicatedForce || 0).toFixed(2);
+    if (defEl) defEl.textContent = (row.meanRawDeflection || 0).toFixed(5);
   }
 
   calculateFullSuite(prefix = '') {
     let a, b, c, targetConst;
-    if (prefix === '') {
-        a = parseFloat(document.getElementById('t4-a')?.value || document.getElementById('set-coeff-a')?.value || 1);
-        b = parseFloat(document.getElementById('t4-b')?.value || document.getElementById('set-coeff-b')?.value || 0);
-        c = parseFloat(document.getElementById('t4-c')?.value || document.getElementById('set-coeff-c')?.value || 0);
-    } else {
-        a = parseFloat(document.getElementById('hist-t4-a')?.textContent || 1);
-        b = parseFloat(document.getElementById('hist-t4-b')?.textContent || 0);
-        c = parseFloat(document.getElementById('hist-t4-c')?.textContent || 0);
-    }
+    if (prefix === '') { a = parseFloat(document.getElementById('t4-a')?.value || 1); b = parseFloat(document.getElementById('t4-b')?.value || 0); c = parseFloat(document.getElementById('t4-c')?.value || 0); }
+    else { a = parseFloat(document.getElementById('hist-t4-a')?.textContent || 1); b = parseFloat(document.getElementById('hist-t4-b')?.textContent || 0); c = parseFloat(document.getElementById('hist-t4-c')?.textContent || 0); }
     targetConst = this.unitConstants[this.currentUnit];
-
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
     if (!data) return;
-
-    // Zeros from Table 2 (index 0 is "0.0" row)
-    const z1 = data.preloading[0].runs[0].r || 0;
-    const z2 = data.preloading[0].runs[1].r || 0;
-    const z3 = data.preloading[0].runs[2].r || 0;
-
+    const z1 = data.measured[0].runs[0].r, z2 = data.measured[0].runs[1].r, z3 = data.measured[0].runs[2].r;
     data.measured.forEach((row, idx) => {
-      // 1. Raw averages for Table 3 columns
-      const activeMs = row.runs.map(r => r.m).filter(m => m !== 0);
-      const activeRs = row.runs.map(r => r.r).filter(r => r !== 0);
-      row.meanIndicatedForce = activeMs.length > 0 ? activeMs.reduce((acc, v) => acc + v, 0) / activeMs.length : 0;
-      row.meanRawDeflection = activeRs.length > 0 ? activeRs.reduce((acc, v) => acc + v, 0) / activeRs.length : 0;
-
-      // 2. Net calculations for math engine
-      const n1 = row.runs[0].r !== 0 ? row.runs[0].r - z1 : 0;
-      const n2 = row.runs[1].r !== 0 ? row.runs[1].r - z2 : 0;
-      const n3 = row.runs[2].r !== 0 ? row.runs[2].r - z3 : 0;
-      
-      row.netValues = [n1, n2, n3];
-      const activeNets = row.netValues.filter((v, i) => row.runs[i].r !== 0);
-      
-      // Mean Net Deflection (row.mean)
-      row.mean = activeNets.length > 0 ? activeNets.reduce((acc, v) => acc + v, 0) / activeNets.length : 0;
-      
-      // Calculate Force in kN (Polynomial) for each run
-      row.runForcesKn = row.netValues.map(n => n !== 0 ? (a * n) + (b * Math.pow(n, 2)) + (c * Math.pow(n, 3)) : 0);
-      
-      // Calculate Mean Force in kN using Mean Net Deflection
-      const forceKn = (a * row.mean) + (b * Math.pow(row.mean, 2)) + (c * Math.pow(row.mean, 3));
-      
-      // Calculate Mean Force (True Reference) in Selected Unit
-      row.meanForce = forceKn / targetConst;
+      const activeMs = row.runs.map(r => r.m).filter(m => m !== null), activeRs = row.runs.map(r => r.r).filter(r => r !== null);
+      row.meanIndicatedForce = activeMs.length > 0 ? activeMs.reduce((acc, v) => acc + v, 0) / activeMs.length : null;
+      row.meanRawDeflection = activeRs.length > 0 ? activeRs.reduce((acc, v) => acc + v, 0) / activeRs.length : null;
+      const n1 = (row.runs[0].r !== null && z1 !== null) ? row.runs[0].r - z1 : null;
+      const n2 = (row.runs[1].r !== null && z2 !== null) ? row.runs[1].r - z2 : null;
+      const n3 = (row.runs[2].r !== null && z3 !== null) ? row.runs[2].r - z3 : null;
+      row.netValues = [n1, n2, n3]; row.mean = row.netValues.filter(v => v !== null).reduce((a, b, i, arr) => a + (b || 0) / (arr.length || 1), 0);
+      const i1 = (row.target === 0 && n1 !== null) ? 0 : ((row.runs[0].m && n1 !== null) ? (n1 / row.runs[0].m) * row.target : null);
+      const i2 = (row.target === 0 && n2 !== null) ? 0 : ((row.runs[1].m && n2 !== null) ? (n2 / row.runs[1].m) * row.target : null);
+      const i3 = (row.target === 0 && n3 !== null) ? 0 : ((row.runs[2].m && n3 !== null) ? (n3 / row.runs[2].m) * row.target : null);
+      row.interpolatedValues = [i1, i2, i3]; row.meanInterpolated = row.interpolatedValues.filter(v => v !== null).reduce((a, b, i, arr) => a + (b || 0) / (arr.length || 1), 0);
+      row.runForcesKn = row.interpolatedValues.map(i => i !== null ? (a * i) + (b * Math.pow(i, 2)) + (c * Math.pow(i, 3)) : null);
+      row.meanForceKn = row.runForcesKn.filter(f => f !== null).reduce((a, b, i, arr) => a + (b || 0) / (arr.length || 1), 0);
+      row.meanForce = row.meanForceKn !== null ? row.meanForceKn / targetConst : null;
     });
-
-    this.renderTable6(prefix);
-    this.renderTable7(prefix);
-    this.renderTable8(prefix);
-    this.renderTable9(prefix);
+    this.renderTable6(prefix); this.renderTable7(prefix); this.renderTable8(prefix); this.renderTable9(prefix);
   }
 
   renderTable6(prefix = '') {
-    const body = document.getElementById(`${prefix}t6-body`);
-    if (!body) return;
+    const body = document.getElementById(`${prefix}t6-body`); if (!body) return;
     const targetConst = this.unitConstants[this.currentUnit];
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
-    if (!data) return;
-    
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
-    
     body.innerHTML = activeRows.map((row) => {
-      const tKn = ((row.target || 0) * targetConst).toFixed(4);
-      const nets = row.netValues || [0, 0, 0];
-      return `
-        <tr>
-          <td>${row.point}</td>
-          <td class="calculated">${nets[0] !== 0 ? tKn : '- -'}</td>
-          <td class="calculated">${nets[0] !== 0 ? nets[0].toFixed(6) : '- -'}</td>
-          <td class="calculated">${nets[1] !== 0 ? tKn : '- -'}</td>
-          <td class="calculated">${nets[1] !== 0 ? nets[1].toFixed(6) : '- -'}</td>
-          <td class="calculated">${nets[2] !== 0 ? tKn : '- -'}</td>
-          <td class="calculated">${nets[2] !== 0 ? nets[2].toFixed(6) : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 ? tKn : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 ? row.mean.toFixed(6) : '- -'}</td>
-        </tr>
-      `;
+      const nets = row.netValues || [null,null,null];
+      const m1 = row.runs[0].m !== null ? (row.runs[0].m * targetConst).toFixed(4) : '- -';
+      const m2 = row.runs[1].m !== null ? (row.runs[1].m * targetConst).toFixed(4) : '- -';
+      const m3 = row.runs[2].m !== null ? (row.runs[2].m * targetConst).toFixed(4) : '- -';
+      return `<tr><td>${row.point}</td><td class="calculated">${nets[0] !== null ? m1 : '- -'}</td><td class="calculated">${nets[0] !== null ? nets[0].toFixed(5) : '- -'}</td><td class="calculated">${nets[1] !== null ? m2 : '- -'}</td><td class="calculated">${nets[1] !== null ? nets[1].toFixed(5) : '- -'}</td><td class="calculated">${nets[2] !== null ? m3 : '- -'}</td><td class="calculated">${nets[2] !== null ? nets[2].toFixed(5) : '- -'}</td><td class="calculated">${row.meanForceKn ? (row.meanForceKn).toFixed(4) : '- -'}</td><td class="calculated">${row.mean ? row.mean.toFixed(5) : '- -'}</td></tr>`;
     }).join('');
   }
 
   renderTable7(prefix = '') {
-    const body = document.getElementById(`${prefix}t7-body`);
-    if (!body) return;
+    const body = document.getElementById(`${prefix}t7-body`); if (!body) return;
     const targetConst = this.unitConstants[this.currentUnit];
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
-    if (!data) return;
-    
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
-    
     body.innerHTML = activeRows.map((row) => {
-      const targetKn = (row.target || 0) * targetConst;
-      const nets = row.netValues || [0, 0, 0];
-      return `
-        <tr>
-          <td class="calculated">${targetKn.toFixed(4)}</td>
-          <td class="calculated">${nets[0] !== 0 ? nets[0].toFixed(6) : '- -'}</td>
-          <td class="calculated">${nets[1] !== 0 ? nets[1].toFixed(6) : '- -'}</td>
-          <td class="calculated">${nets[2] !== 0 ? nets[2].toFixed(6) : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 ? row.mean.toFixed(6) : '- -'}</td>
-        </tr>
-      `;
+      const targetKn = (row.target || 0) * targetConst; const interps = row.interpolatedValues || [null,null,null];
+      return `<tr><td class="calculated">${targetKn.toFixed(4)}</td><td class="calculated">${interps[0] !== null ? interps[0].toFixed(5) : '- -'}</td><td class="calculated">${interps[1] !== null ? interps[1].toFixed(5) : '- -'}</td><td class="calculated">${interps[2] !== null ? interps[2].toFixed(5) : '- -'}</td><td class="calculated">${row.meanInterpolated ? row.meanInterpolated.toFixed(5) : '- -'}</td></tr>`;
     }).join('');
   }
 
   renderTable8(prefix = '') {
-    const body = document.getElementById(`${prefix}t8-body`);
-    if (!body) return;
+    const body = document.getElementById(`${prefix}t8-body`); if (!body) return;
     const targetConst = this.unitConstants[this.currentUnit];
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
-    if (!data) return;
-    
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
-    
     body.innerHTML = activeRows.map((row) => {
-      const targetKn = (row.target || 0) * targetConst;
-      const fKn = row.runForcesKn || [0, 0, 0];
-      const meanKn = row.meanForce * targetConst;
-      return `
-        <tr>
-          <td class="calculated">${targetKn.toFixed(4)}</td>
-          <td class="calculated">${fKn[0] !== 0 ? fKn[0].toFixed(6) : '- -'}</td>
-          <td class="calculated">${fKn[1] !== 0 ? fKn[1].toFixed(6) : '- -'}</td>
-          <td class="calculated">${fKn[2] !== 0 ? fKn[2].toFixed(6) : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 ? meanKn.toFixed(6) : '- -'}</td>
-        </tr>
-      `;
+      const targetKn = (row.target || 0) * targetConst; const fKn = row.runForcesKn || [null,null,null];
+      return `<tr><td class="calculated">${targetKn.toFixed(4)}</td><td class="calculated">${fKn[0] !== null ? fKn[0].toFixed(5) : '- -'}</td><td class="calculated">${fKn[1] !== null ? fKn[1].toFixed(5) : '- -'}</td><td class="calculated">${fKn[2] !== null ? fKn[2].toFixed(5) : '- -'}</td><td class="calculated">${row.meanForceKn ? row.meanForceKn.toFixed(5) : '- -'}</td></tr>`;
     }).join('');
   }
 
   renderTable9(prefix = '') {
-    const body = document.getElementById(`${prefix}t9-body`);
-    if (!body) return;
-
-    let refUnc, resolution;
-    if (prefix === '') {
-        refUnc = parseFloat(document.getElementById('t4-u')?.value || document.getElementById('set-ref-unc')?.value || 0.02);
-        resolution = parseFloat(document.getElementById('t1-resolution')?.value || 0.01);
-    } else {
-        refUnc = parseFloat(document.getElementById('hist-t4-u')?.textContent || 0.02);
-        resolution = parseFloat(document.getElementById('hist-t1-resolution')?.textContent || 0.01);
-    }
-
+    const body = document.getElementById(`${prefix}t9-body`); if (!body) return;
+    let refU, res, drift;
+    if (prefix === '') { refU = parseFloat(document.getElementById('t4-u')?.value || 0.02); res = parseFloat(document.getElementById('t1-resolution')?.value || 0.01); drift = parseFloat(document.getElementById('t4-drift')?.value || 0.05); }
+    else { refU = parseFloat(document.getElementById('hist-t4-u')?.textContent || 0.02); res = parseFloat(document.getElementById('hist-t1-resolution')?.textContent || 0.01); drift = parseFloat(document.getElementById('hist-t4-drift')?.textContent || 0.05); }
     const targetConst = this.unitConstants[this.currentUnit];
-    const kgfConst = this.unitConstants['kgf'];
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
-    if (!data) return;
-
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
+    const lastActive = activeRows[activeRows.length - 1]; const maxCapKn = lastActive ? Math.abs((lastActive.target || 0) * targetConst) : 1e-9;
+    const returnZero = data.measured[data.measured.length - 1]; const resInd = (returnZero && returnZero.target === 0) ? (returnZero.meanIndicatedForce || 0) : 0;
 
     body.innerHTML = activeRows.map((row) => {
-      const activeNets = (row.netValues || []).filter((v, i) => row.runs[i].r !== 0);
+      let w_rep = null, w_res = null, w_std = null;
+      let w_comb = null, W_exp = null, accu_q = null, rep_b = null, zero_f0 = null, className = '- -';
       
-      let w_rep = 0;
-      let w_res = 0;
-      let w_std = Math.sqrt(Math.pow(refUnc / 2, 2) + Math.pow(0.05 / Math.sqrt(3), 2));
-      let w_comb = 0;
-      let W_exp = 0;
-      let accu_q = 0;
-      let rep_b = 0;
-      let zero_f0 = 0;
-      let className = '-';
+      const hasData = row.meanInterpolated !== null && row.meanForceKn !== null;
 
-      if (activeNets.length > 0 && row.mean !== 0 && row.target !== 0) {
-        // Standard Deviation of Net Values
-        const sd = this.stdev(activeNets);
+      if (hasData) {
+        // Base standard uncertainty components
+        w_std = Math.sqrt(Math.pow(refU / 2, 2) + Math.pow(drift / Math.sqrt(3), 2));
         
-        // w_rep = ((stdev / sqrt(3)) / |row.mean|) * 100
-        w_rep = (Math.abs(row.mean) > 0) ? ((sd / Math.sqrt(3)) / Math.abs(row.mean)) * 100 : 0;
-        
-        // w_res = (resolution / (mean_force_kgf * 2 * sqrt(3))) * 100
-        const meanKgf = row.meanForce * (targetConst / kgfConst);
-        w_res = meanKgf !== 0 ? (resolution / (Math.abs(meanKgf) * 2 * Math.sqrt(3))) * 100 : 0;
-        
-        // w_comb = sqrt(w_rep^2 + w_res^2 + w_std^2)
-        w_comb = Math.sqrt(Math.pow(w_rep, 2) + Math.pow(w_res, 2) + Math.pow(w_std, 2));
-        
-        // W_exp = w_comb * 2
-        W_exp = w_comb * 2; 
+        // Division by Zero Guard (for relative uncertainties)
+        const meanKn = Math.abs(row.meanForceKn);
+        if (meanKn > 1e-9) {
+            const activeF = (row.runForcesKn || []).filter(f => f !== null); 
+            const resKn = (res || 0) * targetConst; 
+            const sd = this.stdev(activeF);
+            
+            w_rep = ((sd / Math.sqrt(activeF.length)) / meanKn) * 100; 
+            w_res = (resKn / (meanKn * 2 * Math.sqrt(3))) * 100;
+            w_comb = Math.sqrt(Math.pow(w_rep, 2) + Math.pow(w_res, 2) + Math.pow(w_std, 2)); 
+            W_exp = w_comb * 2; 
+            
+            // Limit extreme values to prevent UI overflow
+            W_exp = Math.min(W_exp, 999.999);
+            w_rep = Math.min(w_rep, 999.999);
+            w_res = Math.min(w_res, 999.999);
+            w_comb = Math.min(w_comb, 999.999);
 
-        // Errors (qi, bi, f0)
-        accu_q = row.meanForce !== 0 ? ((row.target - row.meanForce) / row.meanForce) * 100 : 0;
-        
-        const fKn = row.runForcesKn || [0,0,0];
-        const activeForces = fKn.filter(f => f !== 0);
-        const range = activeForces.length > 1 ? Math.max(...activeForces) - Math.min(...activeForces) : 0;
-        const meanKn = row.meanForce * targetConst;
-        rep_b = meanKn !== 0 ? (range / Math.abs(meanKn)) * 100 : 0;
-        
-        zero_f0 = 0;
-        
-        // Classification based on Uncertainty (Previous Logic)
-        if (W_exp < 0.05) className = 'Class 0';
-        else if (W_exp < 0.1) className = 'Class 1';
-        else if (W_exp < 0.2) className = 'Class 2';
-        else className = 'Class 3';
+            accu_q = (((row.target * targetConst) - row.meanForceKn) / meanKn) * 100;
+            rep_b = activeF.length > 1 ? ((Math.max(...activeF) - Math.min(...activeF)) / meanKn) * 100 : 0;
+            zero_f0 = maxCapKn > 0 ? (Math.abs(resInd * targetConst) / maxCapKn) * 100 : 0;
+            
+            if (W_exp <= 0.05) className = 'Class 0'; 
+            else if (W_exp <= 0.1) className = 'Class 1'; 
+            else if (W_exp <= 0.2) className = 'Class 2'; 
+            else if (W_exp <= 0.5) className = 'Class 3'; 
+            else className = 'Outside Class';
+        } else {
+            // It's the zero point. Keep uncertainties null but errors can be calculated if needed.
+            // But usually ISO 376 doesn't calculate error % for the 0 target point if force is 0.
+            className = '- -';
+            zero_f0 = maxCapKn > 0 ? (Math.abs(resInd * targetConst) / maxCapKn) * 100 : 0;
+            accu_q = 0;
+            rep_b = 0;
+        }
       }
+      
+      const fmt = (v) => v !== null ? v.toFixed(6) : "- -";
+      const fmtExp = (v) => v !== null ? v.toFixed(3) : "- -";
+      const fmtErr = (v) => v !== null ? v.toFixed(2) : "- -";
 
-      return `
-        <tr>
-          <td>${row.point}</td>
-          <td class="calculated">${row.mean !== 0 ? w_rep.toFixed(4) : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 ? w_res.toFixed(4) : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 ? w_std.toFixed(4) : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 ? w_comb.toFixed(4) : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 ? W_exp.toFixed(4) : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 && row.target !== 0 ? accu_q.toFixed(4) : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 && row.target !== 0 ? rep_b.toFixed(4) : '- -'}</td>
-          <td class="calculated">${row.mean !== 0 && row.target !== 0 ? zero_f0.toFixed(4) : '- -'}</td>
-          <td class="calculated">${className}</td>
-        </tr>
-      `;
+      // 0 Target force point specifically shouldn't show relative uncertainties
+      const isZero = row.target === 0;
+      const displayClass = (!isZero && className === 'Outside Class') ? '- -' : className;
+
+      return `<tr><td>${row.point}</td><td class="calculated">${!isZero ? fmt(w_rep) : '- -'}</td><td class="calculated">${!isZero ? fmt(w_res) : '- -'}</td><td class="calculated">${!isZero ? fmt(w_std) : '- -'}</td><td class="calculated">${!isZero ? fmt(w_comb) : '- -'}</td><td class="calculated">${!isZero ? fmtExp(W_exp) : '- -'}</td><td class="calculated">${!isZero ? fmtErr(accu_q) : '- -'}</td><td class="calculated">${!isZero ? fmtErr(rep_b) : '- -'}</td><td class="calculated">${!isZero ? fmtErr(zero_f0) : '- -'}</td><td class="calculated">${!isZero ? displayClass : '- -'}</td></tr>`;
     }).join('');
   }
 
   async captureToSelectedCell() {
-    if (!this.selectedCell) {
-      alert("Please select a cell in the table first.");
-      return;
-    }
-
+    if (!this.selectedCell) { alert("Please select a cell first."); return; }
     const { type, run, idx, row, tab } = this.selectedCell.dataset;
-    
-    // Read from hardware
     try {
-      const res = await fetch('/api/hardware/read');
-      const data = await res.json();
-      const value = data.raw_deflection || 0;
-
-      if (tab === "2") {
-          // Preload table
-          this.loggerData.preloading[row].runs[run-1][type] = value;
-      } else if (tab === "3") {
-          // Measured Data table
-          this.loggerData.measured[idx].runs[run-1][type] = value;
-      }
-      
+      const res = await fetch('/api/hardware/read'); const data = await res.json();
+      if (tab === "2") this.loggerData.preloading[row].runs[run-1][type] = data.raw_deflection || 0;
+      else if (tab === "3") this.loggerData.measured[idx].runs[run-1][type] = data.raw_deflection || 0;
       this.renderReplicaTables();
-    } catch (e) {
-      alert("Capture failed: Hardware not connected.");
-    }
-  }
-
-  clearLoggerData() {
-    if (confirm("Clear all data in the logger tables?")) {
-      this.loggerData.preloading.forEach(r => r.runs.forEach(run => { run.m = 0; run.r = 0; }));
-      this.loggerData.measured.forEach(r => {
-        r.runs.forEach(run => { run.m = 0; run.r = 0; });
-        r.mean = 0; r.uncertainty = 0; r.class = 'N/A';
-      });
-      this.renderReplicaTables();
-    }
-  }
-
-  async syncLoggerToExcel() {
-    if (!this.currentProject) {
-      alert("Please save the project first before exporting.");
-      return;
-    }
-    if (!confirm("Are you sure you want to export the current data to an Excel report?")) return;
-    alert("Syncing current table state to Excel Template...");
-    window.location.href = `/api/export/excel/${this.currentProject.id}?data=${JSON.stringify(this.loggerData)}`;
-  }
-
-  loadDemoData() {
-    if (!confirm("Load test data from Excel legacy file? This will unlock all tables and overwrite current entries.")) return;
-
-    this.demoMode = true;
-    const refNoEl = document.getElementById('t1-ref-no');
-    const capEl = document.getElementById('t1-capacity');
-    if (refNoEl) refNoEl.value = "DEMO-2026-XLS";
-    if (capEl) capEl.value = "100";
-    
-    if (refNoEl) refNoEl.dispatchEvent(new Event('input'));
-    if (capEl) capEl.dispatchEvent(new Event('input'));
-
-    const sel = document.getElementById('lc-selector');
-    sel.value = "3"; 
-    sel.dispatchEvent(new Event('change'));
-
-    this.setSystemUnit('kgf');
-
-    const demoPoints = [
-      { target: 20, r1: 0.038718, r2: 0.038906, r3: 0.039014 },
-      { target: 40, r1: 0.079760, r2: 0.079224, r3: 0.079328 },
-      { target: 60, r1: 0.119572, r2: 0.119712, r3: 0.119382 },
-      { target: 80, r1: 0.160726, r2: 0.160792, r3: 0.160394 },
-      { target: 100, r1: 0.201072, r2: 0.200842, r3: 0.200508 }
-    ];
-
-    const baseline = { target: 0, r1: -0.002132, r2: -0.002134, r3: -0.002132 };
-    this.loggerData.preloading[0].target = baseline.target;
-    this.loggerData.preloading[0].runs[0].m = baseline.target; this.loggerData.preloading[0].runs[0].r = baseline.r1;
-    this.loggerData.preloading[0].runs[1].m = baseline.target; this.loggerData.preloading[0].runs[1].r = baseline.r2;
-    this.loggerData.preloading[0].runs[2].m = baseline.target; this.loggerData.preloading[0].runs[2].r = baseline.r3;
-
-    this.loggerData.measured.forEach(row => {
-      row.target = 0;
-      row.runs.forEach(run => { run.m = 0; run.r = 0; });
-    });
-
-    const zeroRow = this.loggerData.measured[0];
-    zeroRow.target = baseline.target;
-    zeroRow.runs[0].m = baseline.target; zeroRow.runs[0].r = baseline.r1;
-    zeroRow.runs[1].m = baseline.target; zeroRow.runs[1].r = baseline.r2;
-    zeroRow.runs[2].m = baseline.target; zeroRow.runs[2].r = baseline.r3;
-
-    demoPoints.forEach((p, i) => {
-      const row = this.loggerData.measured[i + 1];
-      if (row) {
-        row.target = p.target;
-        row.runs[0].m = p.target; row.runs[0].r = p.r1;
-        row.runs[1].m = p.target; row.runs[1].r = p.r2;
-        row.runs[2].m = p.target; row.runs[2].r = p.r3;
-      }
-    });
-    
-    this.calculateFullSuite(); 
-
-    document.getElementById('t5-temp-b').value = 23.0;
-    document.getElementById('t5-temp-a').value = 23.0;
-    document.getElementById('t5-hum-b').value = 39.0;
-    document.getElementById('t5-hum-a').value = 39.0;
-
-    this.renderReplicaTables();
-    alert("Excel Demo Data loaded successfully. Calculations updated.");
+    } catch (e) { alert("Capture failed."); }
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  window.app = new DMP41CalibrationApp();
-});
+document.addEventListener('DOMContentLoaded', () => { window.app = new DMP41CalibrationApp(); });

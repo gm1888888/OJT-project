@@ -6,7 +6,6 @@ const fs = require('fs');
 const path = require('path');
 const DMP41Interface = require('./services/dmp41_interface');
 const CalibrationEngine = require('./services/calibration_engine');
-const CertificateGenerator = require('./services/certificate_generator');
 const ExcelEngine = require('./services/excel_engine');
 
 const app = express();
@@ -38,7 +37,6 @@ if (fs.existsSync(SETTINGS_FILE)) {
 }
 
 const calibEngine = new CalibrationEngine();
-const certGen = new CertificateGenerator();
 
 // Database setup using built-in node:sqlite
 const db = new DatabaseSync(process.env.DB_PATH || './calibration_data.db');
@@ -50,6 +48,7 @@ function initDatabase() {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_name TEXT NOT NULL,
     client_name TEXT,
+    client_address TEXT,
     instrument_name TEXT,
     serial_number TEXT,
     capacity_kgf REAL,
@@ -188,6 +187,15 @@ function initDatabase() {
   try { db.exec("ALTER TABLE calibration_projects ADD COLUMN ref_cert TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE calibration_projects ADD COLUMN ref_date TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE calibration_projects ADD COLUMN is_archived BOOLEAN DEFAULT 0"); } catch (e) {}
+  
+  // Separated Load Cell and Indicator info
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN lc_make TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN lc_sn TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN ind_make TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN ind_sn TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN client_address TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN capacity_text TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE calibration_projects ADD COLUMN standard_id TEXT"); } catch (e) {}
 }
 
 // ============================================
@@ -328,27 +336,35 @@ app.post('/api/hardware/command', async (req, res) => {
 app.post('/api/calibration/projects', (req, res) => {
   try {
     const { 
-      project_name, instrument_name, serial_number, capacity_kgf, calibration_date, mode, 
+      project_name, client_name, client_address, instrument_name, serial_number, capacity_kgf, calibration_date, mode, 
       range_text, make_model, increment, resolution,
       coeff_a, coeff_b, coeff_c, ref_unc,
       temperature_before, temperature_after, humidity_before, humidity_after,
-      output_unit, ref_model, ref_capacity, ref_sn, ref_cert, ref_date
+      output_unit, ref_model, ref_capacity, ref_sn, ref_cert, ref_date,
+      lc_make, lc_sn, ind_make, ind_sn, capacity_text, standard_id
     } = req.body;
+
+    if (!project_name) {
+      return res.status(400).json({ error: 'Project name is required.' });
+    }
+
     const stmt = db.prepare(`
       INSERT INTO calibration_projects 
-      (project_name, instrument_name, serial_number, capacity_kgf, calibration_date, mode, range_text, make_model, increment, resolution,
+      (project_name, client_name, client_address, instrument_name, serial_number, capacity_kgf, calibration_date, mode, range_text, make_model, increment, resolution,
        coeff_a, coeff_b, coeff_c, ref_unc,
        temperature_before, temperature_after, humidity_before, humidity_after,
-       output_unit, ref_model, ref_capacity, ref_sn, ref_cert, ref_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       output_unit, ref_model, ref_capacity, ref_sn, ref_cert, ref_date,
+       lc_make, lc_sn, ind_make, ind_sn, capacity_text, standard_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     const result = stmt.run(
-      project_name ?? null, instrument_name ?? null, serial_number ?? null, capacity_kgf ?? null, calibration_date ?? null, mode ?? 'Compression', 
+      project_name ?? null, client_name ?? null, client_address ?? null, instrument_name ?? null, serial_number ?? null, capacity_kgf ?? null, calibration_date ?? null, mode ?? 'Compression', 
       range_text ?? null, make_model ?? null, increment ?? null, resolution ?? null,
       coeff_a ?? null, coeff_b ?? null, coeff_c ?? null, ref_unc ?? null,
       temperature_before ?? null, temperature_after ?? null, humidity_before ?? null, humidity_after ?? null,
-      output_unit ?? 'kgf', ref_model ?? null, ref_capacity ?? null, ref_sn ?? null, ref_cert ?? null, ref_date ?? null
+      output_unit ?? 'kgf', ref_model ?? null, ref_capacity ?? null, ref_sn ?? null, ref_cert ?? null, ref_date ?? null,
+      lc_make ?? null, lc_sn ?? null, ind_make ?? null, ind_sn ?? null, capacity_text ?? null, standard_id ?? null
     );
     res.json({ project_id: result.lastInsertRowid, status: 'success' });
   } catch (err) {
@@ -407,25 +423,28 @@ app.put('/api/calibration/projects/:id/save', (req, res) => {
 app.put('/api/calibration/projects/:id', (req, res) => {
   try {
     const { 
-      project_name, instrument_name, serial_number, capacity_kgf, calibration_date, mode, 
+      project_name, client_name, client_address, instrument_name, serial_number, capacity_kgf, calibration_date, mode, 
       range_text, make_model, increment, resolution,
       coeff_a, coeff_b, coeff_c, ref_unc,
       temperature_before, temperature_after, humidity_before, humidity_after,
-      output_unit, ref_model, ref_capacity, ref_sn, ref_cert, ref_date
+      output_unit, ref_model, ref_capacity, ref_sn, ref_cert, ref_date,
+      lc_make, lc_sn, ind_make, ind_sn, capacity_text, standard_id
     } = req.body;
     db.prepare(`
       UPDATE calibration_projects
-      SET project_name = ?, instrument_name = ?, serial_number = ?, capacity_kgf = ?, calibration_date = ?, mode = ?, range_text = ?, make_model = ?, increment = ?, resolution = ?,
+      SET project_name = ?, client_name = ?, client_address = ?, instrument_name = ?, serial_number = ?, capacity_kgf = ?, calibration_date = ?, mode = ?, range_text = ?, make_model = ?, increment = ?, resolution = ?,
           coeff_a = ?, coeff_b = ?, coeff_c = ?, ref_unc = ?,
           temperature_before = ?, temperature_after = ?, humidity_before = ?, humidity_after = ?,
-          output_unit = ?, ref_model = ?, ref_capacity = ?, ref_sn = ?, ref_cert = ?, ref_date = ?, updated_at = CURRENT_TIMESTAMP
+          output_unit = ?, ref_model = ?, ref_capacity = ?, ref_sn = ?, ref_cert = ?, ref_date = ?,
+          lc_make = ?, lc_sn = ?, ind_make = ?, ind_sn = ?, capacity_text = ?, standard_id = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
-      project_name ?? null, instrument_name ?? null, serial_number ?? null, capacity_kgf ?? null, calibration_date ?? null, mode ?? 'Compression', 
+      project_name ?? null, client_name ?? null, client_address ?? null, instrument_name ?? null, serial_number ?? null, capacity_kgf ?? null, calibration_date ?? null, mode ?? 'Compression', 
       range_text ?? null, make_model ?? null, increment ?? null, resolution ?? null,
       coeff_a ?? null, coeff_b ?? null, coeff_c ?? null, ref_unc ?? null,
       temperature_before ?? null, temperature_after ?? null, humidity_before ?? null, humidity_after ?? null,
-      output_unit ?? 'kgf', ref_model ?? null, ref_capacity ?? null, ref_sn ?? null, ref_cert ?? null, ref_date ?? null, req.params.id
+      output_unit ?? 'kgf', ref_model ?? null, ref_capacity ?? null, ref_sn ?? null, ref_cert ?? null, ref_date ?? null,
+      lc_make ?? null, lc_sn ?? null, ind_make ?? null, ind_sn ?? null, capacity_text ?? null, standard_id ?? null, req.params.id
     );
     res.json({ success: true });
   } catch (err) {    res.status(500).json({ error: err.message });
@@ -484,10 +503,20 @@ app.get('/api/calibration/process/:project_id', (req, res) => {
     // 5. Process Measured Groups
     const sortedSeqs = Object.keys(pointsBySeq).map(Number).sort((a, b) => a - b);
     
+    const unitConstants = {
+      'kgf': 0.00980665,
+      'kN': 1.0,
+      'lbf': 0.004448222,
+      'N': 0.001,
+      'tf': 9.80665
+    };
+    const unit_scale = unitConstants[project.output_unit] || 0.00980665;
+    
     const results = sortedSeqs.map(seq => {
       const data = pointsBySeq[seq];
       return calibEngine.processCalibrationPoint({
         targetForceKgf: data.target,
+        unit_scale: unit_scale,
         series1_m: data.m1,
         series2_m: data.m2,
         series3_m: data.m3,
@@ -511,39 +540,6 @@ app.get('/api/calibration/process/:project_id', (req, res) => {
         preloading: preloadingPoints,
         results: results
     });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ============================================
-// MATH ROUTES
-// ============================================
-
-app.post('/api/math/polynomial', (req, res) => {
-  try {
-    const { raw_deflection_mvv, a, b, c } = req.body;
-    const result = calibEngine.calculateEquivalentForce(raw_deflection_mvv, a, b, c);
-    res.json({ equivalent_force_kn: result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/math/three-run-average', (req, res) => {
-  try {
-    const { series1_kn, series2_kn, series3_kn } = req.body;
-    const result = calibEngine.calculateThreeRunAverage(series1_kn, series2_kn, series3_kn);
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/math/uncertainty', (req, res) => {
-  try {
-    const result = calibEngine.calculateUncertainty(req.body);
-    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -585,26 +581,135 @@ app.post('/api/settings/save', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// ============================================
-// CERTIFICATE ROUTES
-// ============================================
+function buildExportData(projectId) {
+  // 1. Fetch Project Metadata
+  const project = db.prepare('SELECT * FROM calibration_projects WHERE id = ?').get(projectId);
+  if (!project) throw new Error('Project not found');
+  if (project.is_archived === 1) throw new Error('Archived records cannot be exported. Restore to history first.');
 
-app.post('/api/certificate/generate', async (req, res) => {
-  try {
-    const { project_id, format = 'pdf' } = req.body;
+  // 2. Fetch Test Points
+  const points = db.prepare('SELECT * FROM test_points WHERE project_id = ? ORDER BY measurement_sequence ASC, series_number ASC').all(projectId);
+
+  // 3. Separate stages and format
+  const preloadingPoints = {};
+  const measuredPoints = {};
+
+  points.forEach(pt => {
+    const stage = pt.stage_name === 'Pre-loading' ? preloadingPoints : measuredPoints;
+    const target = pt.target_value_kgf;
+    const seq = pt.measurement_sequence;
+    const key = `${stage === preloadingPoints ? 'pre' : 'meas'}_${seq}_${target}`;
     
-    // In a real app, you would fetch project and results data from DB here
-    const projectData = { cert_no: 'CERT-' + project_id, instrument_name: 'Unknown', serial_number: 'N/A' };
-    const resultsData = []; // Mock empty results for now
-    
-    if (format === 'html') {
-      const html = await certGen.generateHTMLCertificate(projectData, resultsData);
-      res.send(html);
-    } else {
-      res.json({ status: 'success', message: 'Certificate generated (mock)', project_id });
+    if (!stage[key]) {
+      stage[key] = { target: target, s1: 0, s2: 0, s3: 0, m1: target, m2: target, m3: target };
     }
+    if (pt.series_number === 1) { stage[key].s1 = pt.raw_reading_mvv; stage[key].m1 = pt.machine_indicated_kgf ?? target; }
+    if (pt.series_number === 2) { stage[key].s2 = pt.raw_reading_mvv; stage[key].m2 = pt.machine_indicated_kgf ?? target; }
+    if (pt.series_number === 3) { stage[key].s3 = pt.raw_reading_mvv; stage[key].m3 = pt.machine_indicated_kgf ?? target; }
+  });
+
+  // 5. Process Measured Groups to get calculated results
+  const sortedSeqs = Object.keys(measuredPoints).map(k => parseInt(k.split('_')[1])).sort((a, b) => a - b);
+  
+  const unitConstants = {
+    'kgf': 0.00980665,
+    'kN': 1.0,
+    'lbf': 0.004448222,
+    'N': 0.001,
+    'tf': 9.80665
+  };
+  const unit_scale = unitConstants[project.output_unit] || 0.00980665;
+  
+  const baselineKey = Object.keys(measuredPoints).find(k => k.startsWith('meas_0_'));
+  const z1 = measuredPoints[baselineKey]?.s1 || 0;
+  const z2 = measuredPoints[baselineKey]?.s2 || 0;
+  const z3 = measuredPoints[baselineKey]?.s3 || 0;
+
+  const coeffA = parseFloat(project.coeff_a ?? 1.0) || 1.0;
+  const coeffB = parseFloat(project.coeff_b ?? 0.0) || 0.0;
+  const coeffC = parseFloat(project.coeff_c ?? 0.0) || 0.0;
+  const calUnc = parseFloat(project.ref_unc ?? 0.02) || 0.02;
+  const resolution_kgf = parseFloat(project.resolution) || 0.01;
+
+  const results = sortedSeqs.map(seq => {
+    const key = Object.keys(measuredPoints).find(k => k.startsWith(`meas_${seq}_`));
+    const data = measuredPoints[key];
+    return calibEngine.processCalibrationPoint({
+      targetForceKgf: data.target,
+      unit_scale: unit_scale,
+      series1_m: data.m1,
+      series2_m: data.m2,
+      series3_m: data.m3,
+      series1_mvv: data.s1,
+      series2_mvv: data.s2,
+      series3_mvv: data.s3,
+      zeroBaseline1: z1,
+      zeroBaseline2: z2,
+      zeroBaseline3: z3,
+      coeffA, coeffB, coeffC,
+      calUncertainty_percent: calUnc,
+      resolution_kgf: resolution_kgf,
+      temperatureChange_c: (project.temperature_after || 0) - (project.temperature_before || 0)
+    });
+  });
+
+ return {
+    id: project.id,
+    project_name: project.project_name,
+    client_name: project.client_name,
+    client_address: project.client_address,
+    date: project.calibration_date || project.updated_at,
+    capacity: project.capacity_kgf,
+    
+    // Instrument Information
+    instrument: project.instrument_name || 'N/A',
+    serial: project.serial_number || 'N/A',
+    mode: project.mode || 'Compression',
+    make: project.make_model || 'N/A',
+    range: project.range_text || 'N/A',
+    increment: project.increment || 'N/A',
+    resolution: project.resolution || 'N/A',
+    
+    // Load Cell & Indicator Specifics
+    lc_make: project.lc_make || 'N/A',
+    lc_sn: project.lc_sn || project.serial_number || 'N/A',
+    ind_make: project.ind_make || 'N/A',
+    ind_sn: project.ind_sn || 'N/A',
+    
+    // Standard Metadata & Coefficients
+    ref_model: project.ref_model || 'N/A',
+    ref_sn: project.ref_sn || 'N/A',
+    ref_cert: project.ref_cert || 'N/A',
+    ref_date: project.ref_date || 'N/A',
+    coeff_a: project.coeff_a || 0,
+    coeff_b: project.coeff_b || 0,
+    coeff_c: project.coeff_c || 0,
+    ref_unc: project.ref_unc || 0,
+    ref_drift: project.drift_percent || 0.05,
+    
+    // Environmental Conditions
+    temp_before: project.temperature_before || 0,
+    temp_after: project.temperature_after || 0,
+    hum_before: project.humidity_before || 0,
+    hum_after: project.humidity_after || 0,
+    unit_scale: unit_scale,
+    output_unit: project.output_unit || 'kgf',
+    
+    preloading: Object.values(preloadingPoints),
+    measured: Object.values(measuredPoints),
+    results: results
+  };
+}
+
+app.get('/api/export/pdf/:project_id', async (req, res) => {
+  try {
+    const exportData = buildExportData(req.params.project_id);
+    const reportPath = await ExcelEngine.generateReport(exportData);
+    const pdfPath = await ExcelEngine.generatePDF(reportPath);
+    res.download(pdfPath, `Calibration_Report_${exportData.project_name}.pdf`);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('PDF Export Error:', err);
+    res.status(err.message.includes('not found') ? 404 : (err.message.includes('Archived') ? 403 : 500)).json({ error: err.message });
   }
 });
 
@@ -614,46 +719,12 @@ app.post('/api/certificate/generate', async (req, res) => {
 
 app.get('/api/export/excel/:project_id', async (req, res) => {
   try {
-    const projectId = req.params.project_id;
-    
-    // 1. Fetch Project Metadata
-    const project = db.prepare('SELECT * FROM calibration_projects WHERE id = ?').get(projectId);
-    if (!project) return res.status(404).json({ error: 'Project not found' });
-
-    // 2. Fetch Test Points
-    const points = db.prepare('SELECT * FROM test_points WHERE project_id = ?').all(projectId);
-
-    // 3. Format Data for Excel Bridge
-    const pointsByTarget = {};
-    points.forEach(pt => {
-      if (!pointsByTarget[pt.target_value_kgf]) {
-        pointsByTarget[pt.target_value_kgf] = { s1: 0, s2: 0, s3: 0 };
-      }
-      if (pt.series_number === 1) pointsByTarget[pt.target_value_kgf].s1 = pt.raw_reading_mvv;
-      if (pt.series_number === 2) pointsByTarget[pt.target_value_kgf].s2 = pt.raw_reading_mvv;
-      if (pt.series_number === 3) pointsByTarget[pt.target_value_kgf].s3 = pt.raw_reading_mvv;
-    });
-
-    const exportData = {
-      id: project.id,
-      project_name: project.project_name,
-      client_name: project.client_name,
-      date: project.updated_at,
-      capacity: project.capacity_kgf,
-      points: Object.keys(pointsByTarget).map(t => ({
-        target: t,
-        ...pointsByTarget[t]
-      }))
-    };
-
-    // 4. Generate Excel via Python Bridge
+    const exportData = buildExportData(req.params.project_id);
     const reportPath = await ExcelEngine.generateReport(exportData);
-
-    // 5. Send File to Client
-    res.download(reportPath, `Calibration_Report_${project.project_name}.xls`);
+    res.download(reportPath, `Calibration_Report_${exportData.project_name}.xlsx`);
   } catch (err) {
     console.error('Excel Export Error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.message.includes('not found') ? 404 : (err.message.includes('Archived') ? 403 : 500)).json({ error: err.message });
   }
 });
 
@@ -689,11 +760,84 @@ app.post('/api/calibration/test-points/batch', (req, res) => {
 });
 
 app.get('/api/config/load-cells', (req, res) => {
-  const pathCells = path.join(__dirname, 'config', 'load_cells.json');
-  if (fs.existsSync(pathCells)) {
-    res.json(JSON.parse(fs.readFileSync(pathCells, 'utf8')));
-  } else {
-    res.status(404).json({ error: 'Load cells config not found' });
+  try {
+    let standards = [];
+    const pathCells = path.join(__dirname, 'config', 'load_cells.json');
+    if (fs.existsSync(pathCells)) {
+      standards = JSON.parse(fs.readFileSync(pathCells, 'utf8')).map(s => ({ ...s, is_system: true }));
+    }
+    
+    const customStandards = db.prepare('SELECT * FROM load_cells_reference').all();
+    const mappedCustom = customStandards.map(s => ({
+      id: `custom_${s.id}`,
+      db_id: s.id,
+      model: s.model,
+      capacity: s.capacity_kn + ' kN',
+      sn: s.serial_number,
+      coeff_a: s.coeff_a_compression,
+      coeff_b: s.coeff_b_compression,
+      coeff_c: s.coeff_c_compression,
+      uncertainty: s.uncertainty_compression_percent,
+      cert_no: s.calibration_certificate,
+      cal_date: s.calibration_date,
+      is_system: false
+    }));
+
+    res.json([...standards, ...mappedCustom]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/config/load-cells', (req, res) => {
+  try {
+    const { model, capacity_kn, sn, coeff_a, coeff_b, coeff_c, uncertainty, cert_no, cal_date } = req.body;
+    
+    // Check for duplicate serial number
+    const existing = db.prepare('SELECT id FROM load_cells_reference WHERE serial_number = ?').get(sn);
+    if (existing) {
+      return res.status(400).json({ error: 'A standard with this Serial Number already exists.' });
+    }
+
+    const stmt = db.prepare(`
+      INSERT INTO load_cells_reference 
+      (model, capacity_kn, serial_number, coeff_a_compression, coeff_b_compression, coeff_c_compression, uncertainty_compression_percent, calibration_certificate, calibration_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(model, capacity_kn, sn, coeff_a, coeff_b, coeff_c, uncertainty, cert_no, cal_date);
+    res.json({ id: result.lastInsertRowid, status: 'success' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/config/load-cells/:id', (req, res) => {
+  try {
+    const { model, capacity_kn, sn, coeff_a, coeff_b, coeff_c, uncertainty, cert_no, cal_date } = req.body;
+    
+    // Check for duplicate serial number (excluding the current record)
+    const existing = db.prepare('SELECT id FROM load_cells_reference WHERE serial_number = ? AND id != ?').get(sn, req.params.id);
+    if (existing) {
+      return res.status(400).json({ error: 'A standard with this Serial Number already exists.' });
+    }
+
+    db.prepare(`
+      UPDATE load_cells_reference
+      SET model = ?, capacity_kn = ?, serial_number = ?, coeff_a_compression = ?, coeff_b_compression = ?, coeff_c_compression = ?, uncertainty_compression_percent = ?, calibration_certificate = ?, calibration_date = ?
+      WHERE id = ?
+    `).run(model, capacity_kn, sn, coeff_a, coeff_b, coeff_c, uncertainty, cert_no, cal_date, req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/config/load-cells/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM load_cells_reference WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
