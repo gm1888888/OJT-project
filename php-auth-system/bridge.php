@@ -1,7 +1,6 @@
 <?php
 session_start();
-include 'connect.php';
-include 'config.php';
+include_once 'connect.php';
 
 // Ensure user is logged in
 if (!isset($_SESSION['email'])) {

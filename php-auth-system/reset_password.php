@@ -1,7 +1,7 @@
 <?php
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
-include 'connect.php';
+include_once 'connect.php';
 $message = "";
 
 if(isset($_GET['token'])){

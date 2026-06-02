@@ -1,5 +1,5 @@
 <?php
-include 'config.php';
+include_once 'config.php';
 
 // 1. Connect without database selected
 $conn = new mysqli(DB_HOST, DB_USER, DB_PASS);

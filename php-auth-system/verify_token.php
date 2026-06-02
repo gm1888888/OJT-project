@@ -3,7 +3,7 @@
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
 
-include 'connect.php';
+include_once 'connect.php';
 
 if (isset($_GET['token'])) {
     $token = $conn->real_escape_string($_GET['token']);
