@@ -88,7 +88,8 @@ if %ERRORLEVEL% == 0 (
 )
 
 if exist "%XAMPP_ROOT%\xampp_start.exe" (
-    start /B "" "%XAMPP_ROOT%\xampp_start.exe" >> "%LOG_FILE%" 2>&1
+    :: Use a separate log for XAMPP to avoid file locking conflicts
+    start /B "" "%XAMPP_ROOT%\xampp_start.exe" > logs\xampp.log 2>&1
 ) else (
     echo       - ERROR: xampp_start.exe not found at %XAMPP_ROOT%
     pause
@@ -127,12 +128,22 @@ python -c "import xlwings" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo       - Installing required Python packages [xlwings]...
     pip install xlwings >> "%LOG_FILE%" 2>&1
+    :: Verify installation
+    python -c "import xlwings" >nul 2>&1
+    if %ERRORLEVEL% NEQ 0 (
+        echo       - ERROR: Failed to install xlwings.
+        pause
+    )
 )
 
 :: Ensure node_modules exists
 if not exist node_modules (
     echo       - Installing Node.js dependencies...
     call npm install >> "%LOG_FILE%" 2>&1
+    if not exist node_modules (
+        echo       - ERROR: Failed to install Node.js dependencies.
+        pause
+    )
 )
 
 :: 5. START NODE.JS (Background)
@@ -142,6 +153,8 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 " ^| findstr "LISTENIN
     echo       - Terminating existing process on port 3000 ^(PID: %%a^)...
     taskkill /F /PID %%a >nul 2>&1
 )
+:: Start node and ensure it uses its own log file
+if exist "logs\node.log" del "logs\node.log"
 start /B "NodeEngine" cmd /c "node server.js > logs\node.log 2>&1"
 
 echo [4/5] Waiting for services to stabilize...
@@ -151,7 +164,17 @@ timeout /t 5 /nobreak >nul
 netstat -aon | findstr ":3000 " | findstr "LISTENING" >nul
 if %ERRORLEVEL% NEQ 0 (
     echo       - ERROR: Node.js failed to start on port 3000.
-    echo       - Check logs\node.log for details.
+    echo       - SURFACING LOG CONTENT (logs\node.log):
+    echo ---------------------------------------------------
+    if exist "logs\node.log" (
+        type "logs\node.log"
+    ) else (
+        echo       - ERROR: node.log was not created. Check permissions.
+    )
+    echo ---------------------------------------------------
+    echo.
+    pause
+    goto MENU
 ) else (
     echo       - Node.js Engine: STARTED
 )
