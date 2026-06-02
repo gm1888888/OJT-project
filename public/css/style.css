@@ -287,6 +287,11 @@ tbody tr:nth-child(even) {
   height: auto;
 }
 
+.excel-table td.calculated:empty::after {
+  content: "- -";
+  color: #94a3b8;
+}
+
 .excel-header-main {
   background-color: #e2e8f0;
   font-weight: 600;

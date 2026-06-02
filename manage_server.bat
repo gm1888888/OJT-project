@@ -25,10 +25,10 @@ if not exist node_modules (
 )
 
 :: Check python packages
-python -c "import xlrd, xlwt, xlutils" >nul 2>&1
+python -c "import xlwings" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo Installing required Python packages...
-    pip install xlutils xlrd==1.2.0 xlwt
+    pip install xlwings
 )
 
 :: --- START SERVER ---

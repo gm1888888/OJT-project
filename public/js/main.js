@@ -713,7 +713,7 @@ class DMP41CalibrationApp {
   }
 
   formatCellValue(val, isTarget = false, isReading = false) {
-    if (val === null || val === undefined || val === "") return "- -";
+    if (val === null || val === undefined || val === "") return "";
     return isReading ? parseFloat(val).toFixed(5) : parseFloat(val);
   }
 
@@ -862,10 +862,10 @@ class DMP41CalibrationApp {
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     body.innerHTML = activeRows.map((row) => {
       const nets = row.netValues || [null,null,null];
-      const m1 = row.runs[0].m !== null ? (row.runs[0].m * targetConst).toFixed(4) : '- -';
-      const m2 = row.runs[1].m !== null ? (row.runs[1].m * targetConst).toFixed(4) : '- -';
-      const m3 = row.runs[2].m !== null ? (row.runs[2].m * targetConst).toFixed(4) : '- -';
-      return `<tr><td>${row.point}</td><td class="calculated">${nets[0] !== null ? m1 : '- -'}</td><td class="calculated">${nets[0] !== null ? nets[0].toFixed(5) : '- -'}</td><td class="calculated">${nets[1] !== null ? m2 : '- -'}</td><td class="calculated">${nets[1] !== null ? nets[1].toFixed(5) : '- -'}</td><td class="calculated">${nets[2] !== null ? m3 : '- -'}</td><td class="calculated">${nets[2] !== null ? nets[2].toFixed(5) : '- -'}</td><td class="calculated">${row.meanForceKn ? (row.meanForceKn).toFixed(4) : '- -'}</td><td class="calculated">${row.mean ? row.mean.toFixed(5) : '- -'}</td></tr>`;
+      const m1 = row.runs[0].m !== null ? (row.runs[0].m * targetConst).toFixed(4) : '';
+      const m2 = row.runs[1].m !== null ? (row.runs[1].m * targetConst).toFixed(4) : '';
+      const m3 = row.runs[2].m !== null ? (row.runs[2].m * targetConst).toFixed(4) : '';
+      return `<tr><td>${row.point}</td><td class="calculated">${nets[0] !== null ? m1 : ''}</td><td class="calculated">${nets[0] !== null ? nets[0].toFixed(5) : ''}</td><td class="calculated">${nets[1] !== null ? m2 : ''}</td><td class="calculated">${nets[1] !== null ? nets[1].toFixed(5) : ''}</td><td class="calculated">${nets[2] !== null ? m3 : ''}</td><td class="calculated">${nets[2] !== null ? nets[2].toFixed(5) : ''}</td><td class="calculated">${row.meanForceKn ? (row.meanForceKn).toFixed(4) : ''}</td><td class="calculated">${row.mean ? row.mean.toFixed(5) : ''}</td></tr>`;
     }).join('');
   }
 
@@ -876,7 +876,7 @@ class DMP41CalibrationApp {
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     body.innerHTML = activeRows.map((row) => {
       const targetKn = (row.target || 0) * targetConst; const interps = row.interpolatedValues || [null,null,null];
-      return `<tr><td class="calculated">${targetKn.toFixed(4)}</td><td class="calculated">${interps[0] !== null ? interps[0].toFixed(5) : '- -'}</td><td class="calculated">${interps[1] !== null ? interps[1].toFixed(5) : '- -'}</td><td class="calculated">${interps[2] !== null ? interps[2].toFixed(5) : '- -'}</td><td class="calculated">${row.meanInterpolated ? row.meanInterpolated.toFixed(5) : '- -'}</td></tr>`;
+      return `<tr><td class="calculated">${targetKn.toFixed(4)}</td><td class="calculated">${interps[0] !== null ? interps[0].toFixed(5) : ''}</td><td class="calculated">${interps[1] !== null ? interps[1].toFixed(5) : ''}</td><td class="calculated">${interps[2] !== null ? interps[2].toFixed(5) : ''}</td><td class="calculated">${row.meanInterpolated ? row.meanInterpolated.toFixed(5) : ''}</td></tr>`;
     }).join('');
   }
 
@@ -887,7 +887,7 @@ class DMP41CalibrationApp {
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     body.innerHTML = activeRows.map((row) => {
       const targetKn = (row.target || 0) * targetConst; const fKn = row.runForcesKn || [null,null,null];
-      return `<tr><td class="calculated">${targetKn.toFixed(4)}</td><td class="calculated">${fKn[0] !== null ? fKn[0].toFixed(5) : '- -'}</td><td class="calculated">${fKn[1] !== null ? fKn[1].toFixed(5) : '- -'}</td><td class="calculated">${fKn[2] !== null ? fKn[2].toFixed(5) : '- -'}</td><td class="calculated">${row.meanForceKn ? row.meanForceKn.toFixed(5) : '- -'}</td></tr>`;
+      return `<tr><td class="calculated">${targetKn.toFixed(4)}</td><td class="calculated">${fKn[0] !== null ? fKn[0].toFixed(5) : ''}</td><td class="calculated">${fKn[1] !== null ? fKn[1].toFixed(5) : ''}</td><td class="calculated">${fKn[2] !== null ? fKn[2].toFixed(5) : ''}</td><td class="calculated">${row.meanForceKn ? row.meanForceKn.toFixed(5) : ''}</td></tr>`;
     }).join('');
   }
 
@@ -904,7 +904,7 @@ class DMP41CalibrationApp {
 
     body.innerHTML = activeRows.map((row) => {
       let w_rep = null, w_res = null, w_std = null;
-      let w_comb = null, W_exp = null, accu_q = null, rep_b = null, zero_f0 = null, className = '- -';
+      let w_comb = null, W_exp = null, accu_q = null, rep_b = null, zero_f0 = null, className = '';
       
       const hasData = row.meanInterpolated !== null && row.meanForceKn !== null;
 
@@ -942,22 +942,22 @@ class DMP41CalibrationApp {
         } else {
             // It's the zero point. Keep uncertainties null but errors can be calculated if needed.
             // But usually ISO 376 doesn't calculate error % for the 0 target point if force is 0.
-            className = '- -';
+            className = '';
             zero_f0 = maxCapKn > 0 ? (Math.abs(resInd * targetConst) / maxCapKn) * 100 : 0;
             accu_q = 0;
             rep_b = 0;
         }
       }
       
-      const fmt = (v) => v !== null ? v.toFixed(6) : "- -";
-      const fmtExp = (v) => v !== null ? v.toFixed(3) : "- -";
-      const fmtErr = (v) => v !== null ? v.toFixed(2) : "- -";
+      const fmt = (v) => v !== null ? v.toFixed(6) : "";
+      const fmtExp = (v) => v !== null ? v.toFixed(3) : "";
+      const fmtErr = (v) => v !== null ? v.toFixed(2) : "";
 
       // 0 Target force point specifically shouldn't show relative uncertainties
       const isZero = row.target === 0;
-      const displayClass = (!isZero && className === 'Outside Class') ? '- -' : className;
+      const displayClass = (!isZero && className === 'Outside Class') ? '' : className;
 
-      return `<tr><td>${row.point}</td><td class="calculated">${!isZero ? fmt(w_rep) : '- -'}</td><td class="calculated">${!isZero ? fmt(w_res) : '- -'}</td><td class="calculated">${!isZero ? fmt(w_std) : '- -'}</td><td class="calculated">${!isZero ? fmt(w_comb) : '- -'}</td><td class="calculated">${!isZero ? fmtExp(W_exp) : '- -'}</td><td class="calculated">${!isZero ? fmtErr(accu_q) : '- -'}</td><td class="calculated">${!isZero ? fmtErr(rep_b) : '- -'}</td><td class="calculated">${!isZero ? fmtErr(zero_f0) : '- -'}</td><td class="calculated">${!isZero ? displayClass : '- -'}</td></tr>`;
+      return `<tr><td>${row.point}</td><td class="calculated">${!isZero ? fmt(w_rep) : ''}</td><td class="calculated">${!isZero ? fmt(w_res) : ''}</td><td class="calculated">${!isZero ? fmt(w_std) : ''}</td><td class="calculated">${!isZero ? fmt(w_comb) : ''}</td><td class="calculated">${!isZero ? fmtExp(W_exp) : ''}</td><td class="calculated">${!isZero ? fmtErr(accu_q) : ''}</td><td class="calculated">${!isZero ? fmtErr(rep_b) : ''}</td><td class="calculated">${!isZero ? fmtErr(zero_f0) : ''}</td><td class="calculated">${!isZero ? displayClass : ''}</td></tr>`;
     }).join('');
   }
 

@@ -47,7 +47,7 @@ def populate_new_format(template_path, output_path, data):
         
         def write_cell(cell_ref, val, fmt=None, align='center'):
             rng = ws.range(cell_ref)
-            if val is None or val == "" or val == "- -": rng.value = "- -"
+            if val is None or val == "" or val == "- -": rng.value = ""
             else:
                 rng.value = val
                 if fmt: rng.number_format = fmt
@@ -149,8 +149,8 @@ def populate_new_format(template_path, output_path, data):
         ws.range((T6_7_START - 1, 12)).value = f"Force 3 ({output_unit})"
         ws.range((T6_7_START - 1, 13)).value = ""
         
-        # Table 8 (Polynomial) specific header clearing (around row 88)
-        ws.range((T8_START - 1, 13)).value = ""
+        # Table 9 (Uncertainty) specific header restore
+        ws.range((T8_START - 1, 13)).value = "Class"
         
         # Autofit all header rows to ensure content is not clipped
         ws.range("23:24").rows.autofit()
@@ -268,7 +268,7 @@ def populate_new_format(template_path, output_path, data):
             
             # Formatter for Outside Class
             classification = res.get("classification")
-            display_class = "- -" if classification == "Outside Class" else classification
+            display_class = "" if classification == "Outside Class" else classification
             write_cell((r8, 13), display_class)
 
         # 6. Pagination Preservation

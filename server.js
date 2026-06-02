@@ -196,6 +196,54 @@ function initDatabase() {
   try { db.exec("ALTER TABLE calibration_projects ADD COLUMN client_address TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE calibration_projects ADD COLUMN capacity_text TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE calibration_projects ADD COLUMN standard_id TEXT"); } catch (e) {}
+
+  // --- SEED DEFAULT RECORD ---
+  try {
+    const defaultProject = db.prepare("SELECT count(*) as cnt FROM calibration_projects WHERE project_name = '11-2025-FORC-0272(1)'").get();
+    if (defaultProject.cnt === 0) {
+      const seedPath = path.join(__dirname, 'config', 'seed_data.json');
+      if (fs.existsSync(seedPath)) {
+        const seedData = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+        const p = seedData.project;
+        
+        // Insert Project
+        const pStmt = db.prepare(`
+          INSERT INTO calibration_projects (
+            project_name, client_name, instrument_name, serial_number, capacity_kgf, range_min_kgf, range_max_kgf, 
+            input_unit, output_unit, calibration_date, mode, status, temperature_before, temperature_after, 
+            humidity_before, humidity_after, zero_return_mvv, notes, make_model, increment, resolution, range_text, 
+            coeff_a, coeff_b, coeff_c, ref_unc, ref_model, ref_capacity, ref_sn, ref_cert, ref_date, is_archived, 
+            lc_make, lc_sn, ind_make, ind_sn, client_address, capacity_text, standard_id
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        `);
+        
+        const res = pStmt.run(
+          p.project_name, p.client_name, p.instrument_name, p.serial_number, p.capacity_kgf, p.range_min_kgf, p.range_max_kgf, 
+          p.input_unit, p.output_unit, p.calibration_date, p.mode, p.status, p.temperature_before, p.temperature_after, 
+          p.humidity_before, p.humidity_after, p.zero_return_mvv, p.notes, p.make_model, p.increment, p.resolution, p.range_text, 
+          p.coeff_a, p.coeff_b, p.coeff_c, p.ref_unc, p.ref_model, p.ref_capacity, p.ref_sn, p.ref_cert, p.ref_date, p.is_archived, 
+          p.lc_make, p.lc_sn, p.ind_make, p.ind_sn, p.client_address, p.capacity_text, p.standard_id
+        );
+        
+        const newProjectId = res.lastInsertRowid;
+        
+        // Insert Points
+        const ptStmt = db.prepare(`
+          INSERT INTO test_points (
+            project_id, stage_name, measurement_sequence, series_number, target_value_kgf, raw_reading_mvv, machine_indicated_kgf
+          ) VALUES (?,?,?,?,?,?,?)
+        `);
+        
+        seedData.points.forEach(pt => {
+          ptStmt.run(newProjectId, pt.stage_name, pt.measurement_sequence, pt.series_number, pt.target_value_kgf, pt.raw_reading_mvv, pt.machine_indicated_kgf);
+        });
+        
+        console.log("Seeded default record: 11-2025-FORC-0272(1)");
+      }
+    }
+  } catch (err) {
+    console.error("Failed to seed default database records:", err);
+  }
 }
 
 // ============================================
