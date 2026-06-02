@@ -5,6 +5,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const session = require('express-session');
+const bcrypt = require('bcryptjs');
 const authMiddleware = require('./authMiddleware');
 const DMP41Interface = require('./services/dmp41_interface');
 const CalibrationEngine = require('./services/calibration_engine');
@@ -31,6 +32,10 @@ app.use(express.json());
 
 // Apply Auth Bridge Gatekeeper before serving static files or APIs
 app.use(authMiddleware);
+
+app.get('/auth', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'auth', 'index.html'));
+});
 
 app.use(express.static('public'));
 
@@ -61,6 +66,15 @@ console.log('Connected to the built-in SQLite database.');
 initDatabase();
 
 function initDatabase() {
+  db.exec(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    firstName TEXT NOT NULL,
+    lastName TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   db.exec(`CREATE TABLE IF NOT EXISTS calibration_projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_name TEXT NOT NULL,
@@ -262,6 +276,74 @@ function initDatabase() {
     console.error("Failed to seed default database records:", err);
   }
 }
+
+// ============================================
+// AUTHENTICATION ROUTES
+// ============================================
+
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { fName, lName, email, password } = req.body;
+    
+    if (!fName || !lName || !email || !password) {
+      return res.status(400).json({ status: 'error', error: 'All fields are required.' });
+    }
+
+    // Check if email already exists
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (existing) {
+      return res.status(400).json({ status: 'error', error: 'Email Address Already Exists!' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const stmt = db.prepare('INSERT INTO users (firstName, lastName, email, password) VALUES (?, ?, ?, ?)');
+    stmt.run(fName, lName, email, hashedPassword);
+
+    res.json({ status: 'success', message: 'User registered successfully.' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    if (!user) {
+      return res.status(401).json({ status: 'error', error: 'Incorrect email or password' });
+    }
+
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) {
+      return res.status(401).json({ status: 'error', error: 'Incorrect email or password' });
+    }
+
+    req.session.user = {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName
+    };
+
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
+app.get('/api/auth/logout', (req, res) => {
+  req.session.destroy();
+  res.redirect('/auth');
+});
+
+app.get('/api/auth/me', (req, res) => {
+  if (req.session.user) {
+    res.json({ authenticated: true, user: req.session.user });
+  } else {
+    res.json({ authenticated: false });
+  }
+});
 
 // ============================================
 // HARDWARE ROUTES

@@ -61,35 +61,33 @@ function setButtonLoading(btn, isLoading, originalText) {
 
 if (registerForm) {
     registerForm.addEventListener('submit', function(e) {
-        e.preventDefault(); // Stop the page from reloading!
+        e.preventDefault(); 
         
         const btn = document.getElementById('signUpBtn');
         const originalText = btn.innerHTML;
         setButtonLoading(btn, true, originalText);
 
         const formData = new FormData(this);
-        formData.append('signUp', '1');
+        const data = Object.fromEntries(formData.entries());
 
-        fetch('register.php', {
+        fetch('/api/auth/signup', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
         })
-        .then(response => response.text())
-        .then(data => {
+        .then(response => response.json())
+        .then(result => {
             setButtonLoading(btn, false, originalText);
             
-            if(data.trim() === "Success") {
+            if(result.status === "success") {
                 alert("Registration Complete! Please log in.");
-                
-                // Instantly switch forms!
                 signInForm.style.display = "block";
                 signUpForm.style.display = "none";
-                
-                // Clear out the typed passwords and names
                 registerForm.reset(); 
             } else {
-                // Show whatever error PHP gave us
-                alert(data); 
+                alert(result.error || "Registration failed"); 
             }
         })
         .catch(error => {
@@ -109,21 +107,22 @@ if (signInFormEl) {
         setButtonLoading(btn, true, originalText);
 
         const formData = new FormData(this);
-        formData.append('signIn', '1');
+        const data = Object.fromEntries(formData.entries());
 
-        fetch('register.php', {
+        fetch('/api/auth/login', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
         })
-        .then(response => {
-            // Fetch transparently follows redirects. 
-            // If we ended up at homepage.php, login succeeded.
-            if (response.url.includes('homepage.php')) {
-                window.location.href = 'homepage.php'; // Manually navigate the browser
-            } else if (response.url.includes('error=loginfailed')) {
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === "success") {
+                window.location.href = '/'; 
+            } else {
                 setButtonLoading(btn, false, originalText);
                 
-                // Replicate the error showing logic natively
                 const pwdInput = document.getElementById('signInPassword');
                 const errorMsg = document.getElementById('loginErrorMsg');
                 
@@ -136,9 +135,6 @@ if (signInFormEl) {
                     this.style.color = '';
                     errorMsg.style.display = 'none';
                 });
-            } else {
-                setButtonLoading(btn, false, originalText);
-                alert("Unexpected error occurred.");
             }
         })
         .catch(error => {
