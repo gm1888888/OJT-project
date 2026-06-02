@@ -111,39 +111,105 @@ if not exist .env (
     )
 )
 
+:: Internet Connectivity Check (Quick Ping)
+ping -n 1 google.com >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo       - WARNING: No internet connection detected. 
+    echo       - Dependency installation (npm/pip) may fail if packages are not cached.
+)
+
+:: Node.js Detection & Install
 node -v >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo       - Node.js missing. Installing...
     winget install OpenJS.NodeJS.LTS --accept-package-agreements >> "%LOG_FILE%" 2>&1
+    echo       - IMPORTANT: Node.js was just installed. 
+    echo       - If the next steps fail, please restart this script.
 )
+
+:: Python Detection & Install
+set "PYTHON_CMD=python"
+set "PIP_CMD=pip"
 
 python --version >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo       - Python missing. Installing...
-    winget install Python.Python.3.12 --accept-package-agreements >> "%LOG_FILE%" 2>&1
+    echo       - Python 'python' command not found. Checking for 'py' launcher...
+    py --version >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo       - Found Python Launcher (py).
+        set "PYTHON_CMD=py"
+        set "PIP_CMD=py -m pip"
+    ) else (
+        echo       - Python missing. Attempting installation via winget...
+        winget install Python.Python.3.12 --accept-package-agreements >> "%LOG_FILE%" 2>&1
+        echo       - IMPORTANT: Python was just installed. 
+        echo       - You MAY need to restart this script for PATH changes to take effect.
+        
+        :: Try one last time to see if it became available (sometimes works)
+        python --version >nul 2>&1
+        if %ERRORLEVEL% NEQ 0 (
+            echo       - ERROR: Python installed but not found in PATH.
+            echo       - Please restart your terminal or computer and run this script again.
+            pause
+            goto MENU
+        )
+    )
 )
 
 :: Check xlwings (Critical for Excel Engine)
-python -c "import xlwings" >nul 2>&1
+%PYTHON_CMD% -c "import xlwings" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo       - Installing required Python packages [xlwings]...
-    pip install xlwings >> "%LOG_FILE%" 2>&1
+    if exist "logs\pip_install.log" del "logs\pip_install.log"
+    
+    :: Use -m pip for maximum reliability
+    %PIP_CMD% install xlwings > logs\pip_install.log 2>&1
+    
     :: Verify installation
-    python -c "import xlwings" >nul 2>&1
+    %PYTHON_CMD% -c "import xlwings" >nul 2>&1
     if %ERRORLEVEL% NEQ 0 (
         echo       - ERROR: Failed to install xlwings.
+        echo       - SURFACING PIP ERROR LOG (logs\pip_install.log):
+        echo ---------------------------------------------------
+        if exist "logs\pip_install.log" (
+            type "logs\pip_install.log"
+        ) else (
+            echo       - ERROR: pip_install.log was not created.
+        )
+        echo ---------------------------------------------------
+        echo       - SUGGESTION: Check your internet connection or run:
+        echo         %PIP_CMD% install xlwings --user
+        echo.
         pause
+    ) else (
+        echo       - xlwings: INSTALLED
     )
+) else (
+    echo       - xlwings: FOUND
 )
 
 :: Ensure node_modules exists
 if not exist node_modules (
     echo       - Installing Node.js dependencies...
-    call npm install >> "%LOG_FILE%" 2>&1
+    if exist "logs\npm_install.log" del "logs\npm_install.log"
+    call npm install > logs\npm_install.log 2>&1
+    
     if not exist node_modules (
         echo       - ERROR: Failed to install Node.js dependencies.
+        echo       - SURFACING NPM ERROR LOG (logs\npm_install.log):
+        echo ---------------------------------------------------
+        if exist "logs\npm_install.log" (
+            type "logs\npm_install.log"
+        ) else (
+            echo       - ERROR: npm_install.log was not created.
+        )
+        echo ---------------------------------------------------
         pause
+    ) else (
+        echo       - Node.js dependencies: INSTALLED
     )
+) else (
+    echo       - Node.js dependencies: FOUND
 )
 
 :: 5. START NODE.JS (Background)
