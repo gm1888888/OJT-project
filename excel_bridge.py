@@ -137,17 +137,27 @@ def populate_new_format(template_path, output_path, data):
         ws.range((T5_START - 1, 3)).value = f"Force                                  ({output_unit})"
         ws.range((T5_START - 1, 6)).value = f"Force                                  ({output_unit})"
         ws.range((T5_START - 1, 8)).value = f"Force                                  ({output_unit})"
-        ws.range((T5_START - 1, 10)).value = ""
+        ws.range((T5_START - 1, 10)).value = f"Mean Force ({output_unit})"
         
         # Table 6 & 7 column headers (Row T6_7_START - 2)
         ws.range((T6_7_START - 2, 2)).value = f"Force ({output_unit})"
         ws.range((T6_7_START - 2, 9)).value = f"Force ({output_unit})"
         
+        # Table 7 sub-headers (Reference Force Estimation - Linear)
+        ws.range((T6_7_START - 1, 3)).value = "d1j"
+        ws.range((T6_7_START - 1, 4)).value = "d2j"
+        ws.range((T6_7_START - 1, 6)).value = "d3j"
+        ws.range((T6_7_START - 1, 7)).value = "Mean Value"
+
         # Table 8 sub-headers
         ws.range((T6_7_START - 1, 10)).value = f"Force 1 ({output_unit})"
         ws.range((T6_7_START - 1, 11)).value = f"Force 2 ({output_unit})"
         ws.range((T6_7_START - 1, 12)).value = f"Force 3 ({output_unit})"
-        ws.range((T6_7_START - 1, 13)).value = ""
+        ws.range((T6_7_START - 1, 13)).value = f"Mean Value ({output_unit})"
+        
+        # Ensure text fits
+        ws.range((T6_7_START - 1, 10), (T6_7_START - 1, 13)).api.WrapText = True
+        ws.range(f"{T6_7_START - 1}:{T6_7_START - 1}").rows.autofit()
         
         # Table 9 (Uncertainty) specific header restore
         ws.range((T8_START - 1, 13)).value = "Class"
