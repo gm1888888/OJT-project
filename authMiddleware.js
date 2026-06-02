@@ -1,9 +1,13 @@
 const axios = require('axios');
 
-// Default PHP server URL (Assuming XAMPP/WAMP running on localhost:80)
-const PHP_AUTH_SERVER_URL = process.env.PHP_AUTH_SERVER_URL || 'http://localhost';
-
 const authMiddleware = async (req, res, next) => {
+    // Dynamically determine PHP Server URL to support network access
+    // If process.env.PHP_AUTH_SERVER_URL is set (e.g. in .env), use it.
+    // Otherwise, use the host from the request (e.g. 192.168.x.x)
+    const requestHost = req.get('host').split(':')[0]; // Get hostname/IP without port
+    const protocol = req.protocol;
+    const currentPhpServerUrl = process.env.PHP_AUTH_SERVER_URL || `${protocol}://${requestHost}`;
+
     // 0. Skip authentication for health check endpoints
     if (req.originalUrl === '/api/hardware/status') {
         return next();
@@ -20,7 +24,7 @@ const authMiddleware = async (req, res, next) => {
     if (token) {
         try {
             // 3. Make a backchannel call to PHP to verify the token
-            const response = await axios.get(`${PHP_AUTH_SERVER_URL}/php-auth-system/verify_token.php?token=${token}`);
+            const response = await axios.get(`${currentPhpServerUrl}/php-auth-system/verify_token.php?token=${token}`);
             
             if (response.data && response.data.valid) {
                 // 4. Token is valid. Create a session for this user.
@@ -44,7 +48,7 @@ const authMiddleware = async (req, res, next) => {
     }
 
     // Redirect to PHP login
-    return res.redirect(`${PHP_AUTH_SERVER_URL}/php-auth-system/index.php`);
+    return res.redirect(`${currentPhpServerUrl}/php-auth-system/index.php`);
 };
 
 module.exports = authMiddleware;

@@ -13,7 +13,9 @@ define('DB_PASS', '');
 define('DB_NAME', 'login');
 
 // 3. Node.js Engine Configuration
-$node_engine_url = "http://localhost:3000";
+// Dynamically determine the host to support network access (e.g., http://192.168.x.x:3000)
+$node_engine_port = "3000";
+$node_engine_url = "$protocol://$host:$node_engine_port";
 
 // 3. SMTP Configuration (for password recovery)
 define('SMTP_HOST', 'smtp.gmail.com');
