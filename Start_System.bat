@@ -1,6 +1,9 @@
 @echo off
-:: DMP41 Unified Management Console (v3.1)
+setlocal enabledelayedexpansion
+:: DMP41 Unified Management Console (v4.0 - GitHub Portable)
 :: This script manages the hybrid Node.js + PHP + Python environment.
+:: Designed for portability across different devices.
+
 cd /d "%~dp0"
 title DMP41 Unified Management Console
 
@@ -8,40 +11,87 @@ title DMP41 Unified Management Console
 net session >nul 2>&1
 if errorlevel 1 (
     echo ===================================================
-    echo ERROR: ADMINISTRATOR PRIVILEGES REQUIRED
+    echo NOTICE: Administrator Privileges REQUIRED
     echo ===================================================
-    echo This script needs to manage services and XAMPP.
-    echo Please right-click and "Run as Administrator".
+    echo This script manages services and XAMPP which need
+    echo elevated privileges. Attempting to restart as Admin...
     echo ===================================================
-    pause
-    exit
+    echo.
+    powershell -Command "Start-Process cmd.exe -ArgumentList '/c %0' -Verb RunAs" >nul 2>&1
+    exit /b
 )
 
 :: Logging Setup
 if not exist "logs" mkdir "logs"
-:: Robust locale-independent date stamp via PowerShell
-for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd'"`) do set "STAMP=%%i"
+for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"`) do set "STAMP=%%i"
 set "LOG_FILE=logs\system_%STAMP%.log"
+set "STARTUP_LOG=logs\startup_%STAMP%.log"
 
-:: Load .env variables (Simple parser)
-if exist ".env" (
-    for /f "usebackq tokens=1,2 delims==" %%a in (".env") do (
-        set "%%a=%%b"
+echo [%date% %time%] === System Startup === >> "%STARTUP_LOG%"
+echo PROJECT_DIR=%cd% >> "%STARTUP_LOG%"
+
+:: Initialize variables
+set "XAMPP_ROOT="
+set "XAMPP_FOUND=0"
+set "INSTALLATION_FAILED=0"
+
+:: Load .env variables (Robust parser with error handling)
+if not exist ".env" (
+    echo [%date% %time%] .env not found, checking for .env.example >> "%STARTUP_LOG%"
+    if exist ".env.example" (
+        echo Creating .env from .env.example...
+        copy ".env.example" ".env" >nul 2>&1
+        if errorlevel 1 (
+            echo [%date% %time%] WARNING: Failed to copy .env.example >> "%STARTUP_LOG%"
+        )
     )
 )
 
-:: XAMPP Path Detection
-if "%XAMPP_ROOT%"=="" set "XAMPP_ROOT=C:\xampp"
-if not exist "%XAMPP_ROOT%\htdocs" (
-    if exist "D:\xampp\htdocs" set "XAMPP_ROOT=D:\xampp"
+:: Load environment variables
+if exist ".env" (
+    echo [%date% %time%] Loading .env file >> "%STARTUP_LOG%"
+    for /f "usebackq tokens=1,2 delims==" %%a in (".env") do (
+        if not "%%a"=="" if not "%%b"=="" (
+            set "%%a=%%b"
+            echo [%date% %time%] Loaded: %%a >> "%STARTUP_LOG%"
+        )
+    )
+)
+
+:: XAMPP Path Detection - Multi-location search
+echo [%date% %time%] Detecting XAMPP installation >> "%STARTUP_LOG%"
+if not "!XAMPP_ROOT!"=="" (
+    if exist "!XAMPP_ROOT!\htdocs" (
+        set "XAMPP_FOUND=1"
+        echo [%date% %time%] XAMPP found at !XAMPP_ROOT! >> "%STARTUP_LOG%"
+    )
+)
+
+if !XAMPP_FOUND! equ 0 (
+    for %%D in (C: D: E: F: G: H: I: J: K:) do (
+        if exist "%%D\xampp\htdocs" (
+            set "XAMPP_ROOT=%%D:\xampp"
+            set "XAMPP_FOUND=1"
+            echo [%date% %time%] XAMPP found at !XAMPP_ROOT! >> "%STARTUP_LOG%"
+            goto XAMPP_FOUND_LABEL
+        )
+    )
+    :XAMPP_FOUND_LABEL
+)
+
+:: If still not found, set default and proceed with installation
+if !XAMPP_FOUND! equ 0 (
+    set "XAMPP_ROOT=C:\xampp"
+    echo [%date% %time%] XAMPP not found, will attempt installation >> "%STARTUP_LOG%"
 )
 
 :MENU
 cls
 echo ===================================================
-echo     DMP41 Hybrid System - Management Console
+echo     DMP41 Hybrid System - Management Console (v4.0)
 echo ===================================================
-echo  XAMPP Root: %XAMPP_ROOT%
+echo  Project Directory: %cd%
+echo  XAMPP Root: !XAMPP_ROOT!
 echo ===================================================
 echo.
 echo  [1] Start System
@@ -49,282 +99,278 @@ echo  [2] Restart System
 echo  [3] Stop System
 echo  [4] Update Dependencies
 echo  [5] View Service Status
-echo  [6] Open Application (Browser)
+echo  [6] View System Logs
 echo  [7] Exit
 echo.
 echo ===================================================
 set "choice="
 set /p choice="Select an option (1-7): "
 
-if "%choice%"=="1" goto START_SYSTEM
-if "%choice%"=="2" goto RESTART_SYSTEM
-if "%choice%"=="3" goto STOP_SYSTEM
-if "%choice%"=="4" goto UPDATE_DEPS
-if "%choice%"=="5" goto VIEW_STATUS
-if "%choice%"=="6" goto OPEN_BROWSER
-if "%choice%"=="7" goto EXIT_CMD
+if "!choice!"=="1" goto START_SYSTEM
+if "!choice!"=="2" goto RESTART_SYSTEM
+if "!choice!"=="3" goto STOP_SYSTEM
+if "!choice!"=="4" goto UPDATE_DEPS
+if "!choice!"=="5" goto VIEW_STATUS
+if "!choice!"=="6" goto VIEW_LOGS
+if "!choice!"=="7" goto EXIT_CMD
 goto MENU
 
 :START_SYSTEM
 cls
-echo DEBUG [L82]: Entering START_SYSTEM block
-echo [1/5] Checking Database and PHP Environment...
+echo [%date% %time%] === START_SYSTEM Called === >> "%STARTUP_LOG%"
+echo ===================================================
+echo     Starting DMP41 System
+echo ===================================================
+echo.
 
-:: 1. CHECK AND INSTALL XAMPP (Silent)
-echo DEBUG [L85]: Checking XAMPP at %XAMPP_ROOT%
-IF NOT EXIST "%XAMPP_ROOT%\htdocs" (
-    echo       - XAMPP not found at %XAMPP_ROOT%.
-    echo       - Attempting automated installation via winget...
-    winget install --id ApacheFriends.Xampp.8.2 -e --silent --accept-package-agreements --accept-source-agreements --override "--mode unattended" >> "%LOG_FILE%" 2>&1
-    if errorlevel 1 (
-        echo       - ERROR: XAMPP installation failed or winget not found.
-        echo       - Please install XAMPP manually to %XAMPP_ROOT%
-        pause
-        goto MENU
-    )
-)
+:: Phase 1: Verify Prerequisites
+echo [1/6] Verifying Prerequisites...
+echo [%date% %time%] Phase 1: Verifying Prerequisites >> "%STARTUP_LOG%"
 
-:: 2. START APACHE & MYSQL (Background)
-echo DEBUG [L101]: Starting Apache/MySQL
-echo       - Starting Apache and MySQL...
-
-:: Check if Port 80 is already in use (Common conflict)
-netstat -aon | findstr ":80 " | findstr "LISTENING" >nul
-if not errorlevel 1 (
-    echo       - WARNING: Port 80 is already in use. Apache may fail to start.
-)
-
-if exist "%XAMPP_ROOT%\xampp_start.exe" (
-    REM Use a separate log for XAMPP to avoid file locking conflicts
-    start /B "" "%XAMPP_ROOT%\xampp_start.exe" > logs\xampp.log 2>&1
-) else (
-    echo       - ERROR: xampp_start.exe not found at %XAMPP_ROOT%
+:: Check required folders
+if not exist "php-auth-system" (
+    echo [%date% %time%] ERROR: php-auth-system folder not found >> "%STARTUP_LOG%"
+    echo ERROR: php-auth-system folder not found in project root
+    echo Please ensure the project is cloned correctly from GitHub.
     pause
     goto MENU
 )
 
-:: 3. DEPLOY PHP CODE
-echo DEBUG [L120]: Syncing PHP code
-echo       - Syncing Authentication Portal to htdocs...
-xcopy /E /I /Y "php-auth-system" "%XAMPP_ROOT%\htdocs\php-auth-system" >nul 2>&1
+if not exist "public" (
+    echo [%date% %time%] ERROR: public folder not found >> "%STARTUP_LOG%"
+    echo ERROR: public folder not found in project root
+    pause
+    goto MENU
+)
 
-:: 4. CHECK NODE/PYTHON/XLWINGS
-echo DEBUG [L125]: Entering Step 2 [Dependencies]
-echo [2/5] Verifying Node.js, Python, and xlwings...
+:: Phase 2: XAMPP Check and Install
+echo [2/6] Checking Database and PHP Environment...
+echo [%date% %time%] Phase 2: XAMPP Check >> "%STARTUP_LOG%"
+
+IF NOT EXIST "!XAMPP_ROOT!\htdocs" (
+    echo       - XAMPP not found.
+    echo       - Attempting automated installation...
+    echo [%date% %time%] Attempting XAMPP installation via winget >> "%STARTUP_LOG%"
+    
+    winget install --id ApacheFriends.Xampp.8.2 -e --silent --accept-package-agreements --accept-source-agreements --override "--mode unattended" >> "%LOG_FILE%" 2>&1
+    
+    if errorlevel 1 (
+        echo       - XAMPP installation failed via winget.
+        echo       - Please install XAMPP manually from: https://www.apachefriends.org/
+        echo       - After installation, rerun this script.
+        echo [%date% %time%] XAMPP installation failed >> "%STARTUP_LOG%"
+        pause
+        goto MENU
+    )
+    echo       - XAMPP installed successfully.
+    echo [%date% %time%] XAMPP installed >> "%STARTUP_LOG%"
+) else (
+    echo       - XAMPP found: !XAMPP_ROOT!
+)
+
+:: Start XAMPP
+echo       - Starting Apache and MySQL...
+echo [%date% %time%] Starting XAMPP services >> "%STARTUP_LOG%"
+
+if exist "!XAMPP_ROOT!\xampp_start.exe" (
+    start /B "" "!XAMPP_ROOT!\xampp_start.exe" > "logs\xampp.log" 2>&1
+    timeout /t 3 /nobreak >nul
+    echo       - XAMPP services initiated.
+) else (
+    echo       - ERROR: xampp_start.exe not found
+    echo [%date% %time%] ERROR: xampp_start.exe not found >> "%STARTUP_LOG%"
+    pause
+    goto MENU
+)
+
+:: Deploy PHP Code
+echo       - Syncing PHP authentication system...
+xcopy /E /I /Y /Q "php-auth-system" "!XAMPP_ROOT!\htdocs\php-auth-system" >nul 2>&1
+if errorlevel 1 (
+    echo       - WARNING: Could not sync PHP files completely
+    echo [%date% %time%] WARNING: PHP sync incomplete >> "%STARTUP_LOG%"
+) else (
+    echo       - PHP files synced successfully.
+)
+
+:: Phase 3: Dependencies Check
+echo [3/6] Verifying Node.js, Python, and xlwings...
+echo [%date% %time%] Phase 3: Dependencies Check >> "%STARTUP_LOG%"
 
 :: Ensure .env exists
-echo DEBUG [L129]: Checking for .env
 if not exist .env (
-    echo DEBUG [L131]: .env missing, checking .env.example
+    echo [%date% %time%] .env missing, creating from .env.example >> "%STARTUP_LOG%"
     if exist .env.example (
-        echo       - .env file missing. Creating from .env.example...
         copy .env.example .env >nul
+        echo       - Created .env file from template
     )
 )
 
-:: Internet Connectivity Check (Quick Ping)
-echo DEBUG [L140]: Checking internet connectivity
-ping -n 1 google.com >nul 2>&1
-if errorlevel 1 (
-    echo DEBUG [L143]: Entering no-internet block
-    echo       - WARNING: No internet connection detected. 
-    echo       - Dependency installation [npm/pip] may fail if packages are not cached.
-)
-
 :: Node.js Detection & Install
-echo DEBUG [L149]: Detecting Node.js
+echo       - Checking Node.js...
 node -v >nul 2>&1
 if errorlevel 1 (
-    echo DEBUG [L152]: Node.js missing, attempting install
-    echo       - Node.js missing. Installing...
-    winget install OpenJS.NodeJS.LTS --accept-package-agreements >> "%LOG_FILE%" 2>&1
-    echo       - IMPORTANT: Node.js was just installed. 
-    echo       - If the next steps fail, please restart this script.
+    echo       - Node.js not found. Installing...
+    echo [%date% %time%] Installing Node.js >> "%STARTUP_LOG%"
+    winget install OpenJS.NodeJS.LTS --accept-package-agreements --silent >> "%LOG_FILE%" 2>&1
+    if errorlevel 1 (
+        echo       - Node.js installation failed. Please install manually from nodejs.org
+        echo [%date% %time%] Node.js installation failed >> "%STARTUP_LOG%"
+        pause
+        goto MENU
+    )
+    echo       - Node.js installed. Restarting script for PATH refresh...
+    timeout /t 2 /nobreak >nul
+    start "" cmd /c "%0"
+    exit /b
+) else (
+    for /f "tokens=*" %%i in ('node -v') do (
+        echo       - Node.js %%i found
+    )
 )
 
 :: Python Detection & Install
-echo DEBUG [L160]: Detecting Python
+echo       - Checking Python...
 set "PYTHON_CMD=python"
 set "PIP_CMD=pip"
 
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo DEBUG [L166]: python command failed, checking py launcher
-    echo       - Python 'python' command not found. Checking for 'py' launcher...
+    echo       - Checking Python launcher (py)...
     py --version >nul 2>&1
     if not errorlevel 1 (
-        echo DEBUG [L170]: Found py launcher
-        echo       - Found Python Launcher (py).
         set "PYTHON_CMD=py"
         set "PIP_CMD=py -m pip"
+        echo       - Using Python Launcher (py)
     ) else (
-        echo DEBUG [L175]: py launcher failed, attempting winget install
-        echo       - Python missing. Attempting installation via winget...
-        winget install Python.Python.3.12 --accept-package-agreements >> "%LOG_FILE%" 2>&1
-        echo       - IMPORTANT: Python was just installed. 
-        echo       - You MAY need to restart this script for PATH changes to take effect.
-        
-        REM Try one last time to see if it became available
-        python --version >nul 2>&1
+        echo       - Python not found. Installing...
+        echo [%date% %time%] Installing Python >> "%STARTUP_LOG%"
+        winget install Python.Python.3.12 --accept-package-agreements --silent >> "%LOG_FILE%" 2>&1
         if errorlevel 1 (
-            echo DEBUG [L184]: python still missing after install
-            echo       - ERROR: Python installed but not found in PATH.
-            echo       - Please restart your terminal or computer and run this script again.
+            echo       - Python installation failed. Please install from python.org
+            echo [%date% %time%] Python installation failed >> "%STARTUP_LOG%"
             pause
             goto MENU
         )
+        echo       - Python installed. Restarting script for PATH refresh...
+        timeout /t 2 /nobreak >nul
+        start "" cmd /c "%0"
+        exit /b
+    )
+) else (
+    for /f "tokens=*" %%i in ('python --version') do (
+        echo       - %%i found
     )
 )
-echo DEBUG [L192]: Using PYTHON_CMD=%PYTHON_CMD%
-echo DEBUG [L193]: Using PIP_CMD=%PIP_CMD%
 
-:: Check xlwings (Critical for Excel Engine)
-echo DEBUG [L196]: Checking xlwings
+:: Check xlwings
+echo       - Checking xlwings...
 %PYTHON_CMD% -c "import xlwings" >nul 2>&1
 if errorlevel 1 (
-    echo DEBUG [L199]: xlwings missing, attempting pip install
-    echo       - Installing required Python packages [xlwings]...
-    if exist "logs\pip_install.log" del "logs\pip_install.log"
+    echo       - Installing xlwings...
+    echo [%date% %time%] Installing xlwings >> "%STARTUP_LOG%"
+    %PIP_CMD% install xlwings --quiet >> "logs\pip_install.log" 2>&1
     
-    REM Use -m pip for maximum reliability
-    echo DEBUG [L204]: Executing pip install xlwings
-    %PIP_CMD% install xlwings > logs\pip_install.log 2>&1
-    
-    REM Verify installation
     %PYTHON_CMD% -c "import xlwings" >nul 2>&1
     if errorlevel 1 (
-        echo DEBUG [L210]: xlwings still missing after install
-        echo       - ERROR: Failed to install xlwings.
-        echo       - SURFACING PIP ERROR LOG (logs\pip_install.log):
-        echo ---------------------------------------------------
-        if exist "logs\pip_install.log" (
-            type "logs\pip_install.log"
-        ) else (
-            echo       - ERROR: pip_install.log was not created.
-        )
-        echo ---------------------------------------------------
-        echo       - SUGGESTION: Check your internet connection or run:
-        echo         %PIP_CMD% install xlwings --user
-        echo.
-        pause
+        echo       - WARNING: xlwings installation may have failed
+        echo       - Check logs\pip_install.log for details
+        echo [%date% %time%] xlwings installation issue >> "%STARTUP_LOG%"
     ) else (
-        echo DEBUG [L225]: xlwings installed successfully
-        echo       - xlwings: INSTALLED
+        echo       - xlwings installed
     )
 ) else (
-    echo DEBUG [L229]: xlwings already found
-    echo       - xlwings: FOUND
+    echo       - xlwings found
 )
 
-:: Ensure node_modules exists
-echo DEBUG [L234]: Checking node_modules
-if not exist node_modules (
-    echo DEBUG [L236]: node_modules missing, attempting npm install
-    echo       - Installing Node.js dependencies...
-    if exist "logs\npm_install.log" del "logs\npm_install.log"
-    call npm install > logs\npm_install.log 2>&1
+:: Check Node dependencies
+echo       - Checking Node.js dependencies...
+if not exist "node_modules" (
+    echo       - Installing npm packages...
+    echo [%date% %time%] Installing npm packages >> "%STARTUP_LOG%"
+    call npm install --quiet >> "logs\npm_install.log" 2>&1
     
-    if not exist node_modules (
-        echo       - ERROR: Failed to install Node.js dependencies.
-        echo       - SURFACING NPM ERROR LOG (logs\npm_install.log):
-        echo ---------------------------------------------------
-        if exist "logs\npm_install.log" (
-            type "logs\npm_install.log"
-        ) else (
-            echo       - ERROR: npm_install.log was not created.
+    if not exist "node_modules" (
+        echo       - ERROR: npm install failed
+        echo       - Check logs\npm_install.log for details
+        echo [%date% %time%] npm install failed >> "%STARTUP_LOG%"
+        type "logs\npm_install.log" | findstr "error" >nul 2>&1
+        if not errorlevel 1 (
+            echo       - Errors found:
+            findstr "error" "logs\npm_install.log" | more
         )
-        echo ---------------------------------------------------
         pause
+        goto MENU
     ) else (
-        echo       - Node.js dependencies: INSTALLED
+        echo       - npm packages installed
     )
 ) else (
-    echo       - Node.js dependencies: FOUND
+    echo       - npm packages found
 )
 
-:: 5. START NODE.JS (Background)
-echo [3/5] Starting Node.js Calibration Engine...
-REM Kill existing process on 3000 to avoid conflicts
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 " ^| findstr "LISTENING"') do (
-    echo       - Terminating existing process on port 3000 ^(PID: %%a^)...
+:: Phase 4: Start Node.js
+echo [4/6] Starting Node.js Calibration Engine...
+echo [%date% %time%] Starting Node.js >> "%STARTUP_LOG%"
+
+REM Kill existing process on 3000
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":3000 " ^| findstr "LISTENING"') do (
     taskkill /F /PID %%a >nul 2>&1
 )
-:: Start node and ensure it uses its own log file
+
 if exist "logs\node.log" del "logs\node.log"
 start /B "NodeEngine" cmd /c "node server.js > logs\node.log 2>&1"
+echo [%date% %time%] Node.js process started >> "%STARTUP_LOG%"
 
-echo [4/5] Waiting for services to stabilize...
-timeout /t 5 /nobreak >nul
+timeout /t 3 /nobreak >nul
 
-:: Check if node is actually listening
-netstat -aon | findstr ":3000 " | findstr "LISTENING" >nul
+netstat -aon 2>nul | findstr ":3000 " | findstr "LISTENING" >nul 2>&1
 if errorlevel 1 (
-    echo       - ERROR: Node.js failed to start on port 3000.
-    echo       - SURFACING LOG CONTENT (logs\node.log):
-    echo ---------------------------------------------------
-    if exist "logs\node.log" (
-        type "logs\node.log"
-    ) else (
-        echo       - ERROR: node.log was not created. Check permissions.
-    )
-    echo ---------------------------------------------------
-    echo.
-    pause
-    goto MENU
+    echo       - WARNING: Node.js may not have started on port 3000
+    echo       - Check logs\node.log for details
+    echo [%date% %time%] Node.js port 3000 not listening >> "%STARTUP_LOG%"
+    if exist "logs\node.log" type "logs\node.log"
 ) else (
-    echo       - Node.js Engine: STARTED
+    echo       - Node.js Engine started successfully
 )
 
-:: 6. SERVICE DETECTION & AUTO-LAUNCH
-echo [5/5] Checking Service Health...
+:: Phase 5: Wait for Services
+echo [5/6] Waiting for services to stabilize...
+timeout /t 3 /nobreak >nul
+
+:: Phase 6: Launch Application
+echo [6/6] Opening Application...
+echo [%date% %time%] Opening browser >> "%STARTUP_LOG%"
+
 set "APP_URL=http://localhost/php-auth-system/"
-set "NODE_URL=http://localhost:3000/api/hardware/status"
+start %APP_URL%
 
-powershell -Command ^
-    "$authUrl = '%APP_URL%index.php'; " ^
-    "$nodeUrl = '%NODE_URL%'; " ^
-    "$authReady = $false; $nodeReady = $false; $timeout = 60; $elapsed = 0; " ^
-    "Write-Host '      - Waiting for services to stabilize (60s timeout)...' -NoNewline; " ^
-    "while (-not ($authReady -and $nodeReady) -and $elapsed -lt $timeout) { " ^
-    "    if (-not $authReady) { try { $r = Invoke-WebRequest $authUrl -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { $authReady = $true } } catch {} } " ^
-    "    if (-not $nodeReady) { try { $r = Invoke-WebRequest $nodeUrl -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { $nodeReady = $true } } catch {} } " ^
-    "    if (-not ($authReady -and $nodeReady)) { Start-Sleep -Seconds 2; $elapsed += 2; Write-Host '.' -NoNewline } " ^
-    "} " ^
-    "Write-Host ''; " ^
-    "if ($authReady) { Write-Host '      - Auth Portal: READY' } else { Write-Host '      - Auth Portal: ERROR' }; " ^
-    "if ($nodeReady) { Write-Host '      - Node Engine: READY' } else { Write-Host '      - Node Engine: ERROR' }; " ^
-    "if ($authReady -and $nodeReady) { exit 0 } else { exit 1 }"
-
-if not errorlevel 1 (
-    echo.
-    echo ===================================================
-    echo System Ready.
-    echo Frontend URL: %APP_URL%
-    echo ===================================================
-    echo.
-    echo Launching browser...
-    start %APP_URL%
-) else (
-    echo.
-    echo ===================================================
-    echo ERROR: System failed to stabilize. 
-    echo Please check the logs in the logs folder.
-    echo ===================================================
-    echo.
-)
+echo.
+echo ===================================================
+echo System Started Successfully!
+echo ===================================================
+echo Frontend URL: %APP_URL%
+echo Node.js API: http://localhost:3000
+echo ===================================================
+echo.
+echo [%date% %time%] System startup complete >> "%STARTUP_LOG%"
 pause
 goto MENU
 
 :RESTART_SYSTEM
+cls
 echo Restarting all services...
+echo [%date% %time%] === RESTART_SYSTEM Called === >> "%STARTUP_LOG%"
 call :STOP_SYSTEM_SILENT
-timeout /t 2 /nobreak >nul
+timeout /t 3 /nobreak >nul
 goto START_SYSTEM
 
 :STOP_SYSTEM
+cls
 echo Stopping all DMP41 related processes...
+echo [%date% %time%] === STOP_SYSTEM Called === >> "%STARTUP_LOG%"
 call :STOP_SYSTEM_SILENT
 echo Services stopped.
+echo [%date% %time%] Services stopped >> "%STARTUP_LOG%"
 pause
 goto MENU
 
@@ -332,8 +378,8 @@ goto MENU
 :: Kill Node.js
 taskkill /F /IM node.exe >nul 2>&1
 :: Kill XAMPP processes
-if exist "%XAMPP_ROOT%\xampp_stop.exe" (
-    "%XAMPP_ROOT%\xampp_stop.exe" >nul 2>&1
+if exist "!XAMPP_ROOT!\xampp_stop.exe" (
+    "!XAMPP_ROOT!\xampp_stop.exe" >nul 2>&1
 )
 :: Force kill if hanging
 taskkill /F /IM httpd.exe >nul 2>&1
@@ -342,20 +388,45 @@ exit /b
 
 :UPDATE_DEPS
 cls
+echo ===================================================
 echo Updating project dependencies...
+echo ===================================================
 echo.
-echo [1/2] Updating Node.js packages...
+echo [1/3] Updating Node.js packages...
 call npm install >> "%LOG_FILE%" 2>&1
-echo [2/2] Updating PHP packages...
+if errorlevel 1 (
+    echo WARNING: npm install reported errors. Check %LOG_FILE%
+) else (
+    echo Node.js packages updated successfully.
+)
+
+echo.
+echo [2/3] Updating PHP packages...
 IF EXIST "php-auth-system\composer.phar" (
-    if exist "%XAMPP_ROOT%\php\php.exe" (
-        "%XAMPP_ROOT%\php\php.exe" php-auth-system\composer.phar install --no-interaction >> "%LOG_FILE%" 2>&1
+    if exist "!XAMPP_ROOT!\php\php.exe" (
+        "!XAMPP_ROOT!\php\php.exe" php-auth-system\composer.phar install --no-interaction >> "%LOG_FILE%" 2>&1
     ) else (
         php php-auth-system\composer.phar install --no-interaction >> "%LOG_FILE%" 2>&1
     )
+    echo PHP packages updated.
+) else (
+    echo PHP composer not found, skipping PHP updates.
 )
+
 echo.
+echo [3/3] Checking Python packages...
+%PIP_CMD% list | findstr "xlwings" >nul 2>&1
+if errorlevel 1 (
+    echo Installing xlwings...
+    %PIP_CMD% install xlwings --quiet >> "%LOG_FILE%" 2>&1
+) else (
+    echo xlwings already installed.
+)
+
+echo.
+echo ===================================================
 echo Updates complete. See logs for details.
+echo ===================================================
 pause
 goto MENU
 
@@ -365,25 +436,80 @@ echo ===================================================
 echo             Current Service Status
 echo ===================================================
 echo.
-tasklist /FI "IMAGENAME eq node.exe" | findstr "node.exe" >nul && (echo  [ACTIVE] Node.js Engine) || (echo  [DOWN]   Node.js Engine)
-tasklist /FI "IMAGENAME eq httpd.exe" | findstr "httpd.exe" >nul && (echo  [ACTIVE] Apache Web Server) || (echo  [DOWN]   Apache Web Server)
-tasklist /FI "IMAGENAME eq mysqld.exe" | findstr "mysqld.exe" >nul && (echo  [ACTIVE] MySQL Database) || (echo  [DOWN]   MySQL Database)
+echo Checking running processes...
 echo.
-echo Port 3000:
-netstat -aon | findstr ":3000 " | findstr "LISTENING" || echo  [NOT LISTENING]
+tasklist /FI "IMAGENAME eq node.exe" | findstr "node.exe" >nul && (
+    echo  [ACTIVE] Node.js Engine
+) || (
+    echo  [DOWN]   Node.js Engine
+)
+
+tasklist /FI "IMAGENAME eq httpd.exe" | findstr "httpd.exe" >nul && (
+    echo  [ACTIVE] Apache Web Server
+) || (
+    echo  [DOWN]   Apache Web Server
+)
+
+tasklist /FI "IMAGENAME eq mysqld.exe" | findstr "mysqld.exe" >nul && (
+    echo  [ACTIVE] MySQL Database
+) || (
+    echo  [DOWN]   MySQL Database
+)
+
 echo.
+echo Checking network ports...
+echo.
+echo Port 3000 (Node.js API):
+netstat -aon 2>nul | findstr ":3000 " | findstr "LISTENING" >nul 2>&1 && (
+    echo  [LISTENING] Active
+) || (
+    echo  [NOT LISTENING] Inactive
+)
+
+echo.
+echo Port 80 (Apache HTTP):
+netstat -aon 2>nul | findstr ":80 " | findstr "LISTENING" >nul 2>&1 && (
+    echo  [LISTENING] Active
+) || (
+    echo  [NOT LISTENING] Inactive
+)
+
+echo.
+echo ===================================================
 pause
 goto MENU
 
-:OPEN_BROWSER
-start http://localhost/php-auth-system/index.php
+:VIEW_LOGS
+cls
+echo ===================================================
+echo             Recent System Logs
+echo ===================================================
+echo.
+if exist "%STARTUP_LOG%" (
+    echo Latest Startup Log (Last 20 lines):
+    echo ---------------------------------------------------
+    for /f "skip=* tokens=*" %%a in ('find /v /c "" "%STARTUP_LOG%"') do set "LINES=%%a"
+    setlocal enabledelayedexpansion
+    set /a SKIP=!LINES!-20
+    if !SKIP! lss 0 set SKIP=0
+    more /e +!SKIP! "%STARTUP_LOG%"
+    endlocal
+) else (
+    echo No startup logs found yet.
+)
+
+echo.
+echo ===================================================
+pause
 goto MENU
 
 :EXIT_CMD
 echo.
 set /p exitchoice="Stop services before exiting? (Y/N): "
-if /I "%exitchoice%"=="Y" (
+if /I "!exitchoice!"=="Y" (
     call :STOP_SYSTEM_SILENT
-    exit
+    echo [%date% %time%] === System Exited (services stopped) === >> "%STARTUP_LOG%"
+    exit /b
 )
-exit
+echo [%date% %time%] === System Exited (services running) === >> "%STARTUP_LOG%"
+exit /b
