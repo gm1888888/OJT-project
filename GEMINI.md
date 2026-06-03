@@ -36,10 +36,10 @@ This system features a unique **Hybrid Excel Engine** that combines a modern, re
 - **Hybrid Export**: Populates data directly into the original legacy `.xls` template (`Testing Machine Software_revised (1).xls`), maintaining 100% visual parity with original reports.
 - **Multi-Format Support**: One-click generation of ISO-compliant Certificates (HTML/PDF), CSV data exports, and formatted Print views.
 
-### 5. Custom Load Cell Standards (New in V2.1)
-- **Persistent CRUD**: Integrated `load_cells_reference` SQLite table with the frontend. Users can now Create, Read, Update, and Delete custom standards without touching source code.
-- **Hybrid Source API**: Merges predefined standards from `config/load_cells.json` with user-defined standards from the database, distinguishing them via `is_system` flags.
-- **Categorized UI**: Custom standards are grouped under "User Defined Standards" in the dropdown.
+### 5. Unified Reference Standards Management (New in V2.1)
+- **Persistent CRUD**: Integrated `load_cells_reference` SQLite table with the frontend. Users can Create, Read, Update, and Delete all standards uniformly without touching source code.
+- **Unified API**: All standards (previously system and user-defined) are migrated and managed centrally from the database.
+- **Categorized UI**: All standards are grouped under "Reference Standards" in the dropdown for an integrated experience.
 - **Auto-Injection**: Selecting a standard automatically hydrates the Live Sheet calculation engine and reporting metadata (Table 4).
 
 ---

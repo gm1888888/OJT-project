@@ -196,6 +196,29 @@ function initDatabase() {
     next_calibration_date DATE
   )`);
 
+  // Migrate legacy load_cells.json to DB
+  try {
+    const pathCells = path.join(__dirname, 'config', 'load_cells.json');
+    if (fs.existsSync(pathCells)) {
+      const standards = JSON.parse(fs.readFileSync(pathCells, 'utf8'));
+      const insertStmt = db.prepare(`
+        INSERT INTO load_cells_reference (
+          model, capacity_kn, serial_number, coeff_a_compression, coeff_b_compression, coeff_c_compression, uncertainty_compression_percent
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(model) DO NOTHING
+      `);
+      db.exec('BEGIN TRANSACTION');
+      for (const s of standards) {
+        const capacityVal = parseFloat(s.capacity.replace(/[^0-9.]/g, ''));
+        insertStmt.run(s.model, capacityVal, s.sn, s.coeff_a, s.coeff_b, s.coeff_c, s.uncertainty);
+      }
+      db.exec('COMMIT');
+    }
+  } catch (e) {
+    console.error("Migration error:", e);
+    try { db.exec('ROLLBACK'); } catch (rollbackErr) {}
+  }
+
   // Migrate existing tables
   try { db.exec("ALTER TABLE test_points ADD COLUMN is_zero_return BOOLEAN DEFAULT 0"); } catch (e) {}
   try { db.exec("ALTER TABLE test_points ADD COLUMN machine_indicated_kgf REAL"); } catch (e) {}
@@ -464,9 +487,21 @@ app.post('/api/hardware/command', async (req, res) => {
     
     const sanitizedCmd = command.trim().toUpperCase();
     
-    // Validate DMP41 command structure: 3 letters optionally followed by ? and/or alphanumeric parameters
-    if (!/^[A-Z]{3}(\?[A-Z0-9.\-]*|[A-Z0-9.\-]*)?$/.test(sanitizedCmd)) {
+    // Validate DMP41 command structure: optional *, 3 letters, optionally followed by ? and/or any parameters
+    if (!/^(\*)?[A-Z]{3}(\?.*|.*)?$/.test(sanitizedCmd)) {
       return res.status(400).json({ error: 'Invalid command format. DMP41 commands must be 3 letters (e.g., TAR, MSV?, CHS1).' });
+    }
+
+    const baseCmd = sanitizedCmd.replace(/^\*/, '').substring(0, 3);
+    const isQuery = sanitizedCmd.includes('?');
+    const adminCommands = ['ASA', 'ASS', 'AFS', 'ASF', 'BDR', 'CDW', 'CPV', 'ENU', 'IAD', 'LTB', 'RES', 'SGN', 'TAR', 'TDD', 'UCC', 'SLN', 'DEN', 'DRS', 'CHP', 'SWA', 'BGL'];
+    
+    if (adminCommands.includes(baseCmd) && !isQuery) {
+      // Check admin status
+      const adminStatus = await dmp41.sendCommand('RAR?');
+      if (adminStatus !== '1') {
+        return res.status(403).json({ error: 'Permission denied. Administrator rights required. Use RAR<password> to elevate privileges.' });
+      }
     }
 
     const response = await dmp41.sendCommand(sanitizedCmd);
@@ -653,7 +688,7 @@ app.get('/api/calibration/process/:project_id', (req, res) => {
     const unitConstants = {
       'kgf': 0.00980665,
       'kN': 1.0,
-      'lbf': 0.004448222,
+      'lbf': 0.0044482216152605,
       'N': 0.001,
       'tf': 9.80665
     };
@@ -761,7 +796,7 @@ function buildExportData(projectId) {
   const unitConstants = {
     'kgf': 0.00980665,
     'kN': 1.0,
-    'lbf': 0.004448222,
+    'lbf': 0.0044482216152605,
     'N': 0.001,
     'tf': 9.80665
   };
@@ -875,6 +910,163 @@ app.get('/api/export/excel/:project_id', async (req, res) => {
   }
 });
 
+app.post('/api/export/excel/live', async (req, res) => {
+  try {
+    const liveData = req.body;
+    
+    // We need to re-calculate the results just like buildExportData does, 
+    // or if liveData already has everything, we can just pass it directly.
+    // However, it's safer to ensure it matches the expected structure.
+    const exportData = {
+      project_name: liveData.project_name || 'Live_Project',
+      client_name: liveData.client_name || '',
+      client_address: liveData.client_address || '',
+      calibration_date: liveData.calibration_date || new Date().toISOString(),
+      mode: liveData.mode || 'Compression',
+      capacity_kgf: liveData.capacity_kgf || 0,
+      capacity_text: liveData.capacity_kgf ? liveData.capacity_kgf + ' kgf' : '',
+      instrument_name: liveData.instrument_name || '',
+      serial_number: liveData.serial_number || '',
+      
+      ref_cert: liveData.std_cert || '',
+      ref_date: liveData.std_date || '',
+      ref_model: liveData.std_model || '',
+      ref_sn: liveData.std_sn || '',
+      ref_capacity: liveData.std_cap || '',
+      coeff_a: liveData.coeff_a || 1,
+      coeff_b: liveData.coeff_b || 0,
+      coeff_c: liveData.coeff_c || 0,
+      ref_unc: liveData.uncertainty || 0.02,
+      
+      temp_before: liveData.temp_before || 0,
+      temp_after: liveData.temp_after || 0,
+      hum_before: liveData.hum_before || 0,
+      hum_after: liveData.hum_after || 0,
+      unit_scale: liveData.unit_scale || 0.00980665,
+      output_unit: liveData.output_unit || 'kgf',
+      
+      preloading: liveData.preloading || [],
+      measured: liveData.measured || [],
+      results: liveData.results || []
+    };
+
+    // Calculate full suite for live export to ensure accurate results
+    const results = [];
+    if (exportData.measured && exportData.measured.length > 0) {
+      const z1 = exportData.measured[0]?.runs?.[0]?.r || 0;
+      const z2 = exportData.measured[0]?.runs?.[1]?.r || 0;
+      const z3 = exportData.measured[0]?.runs?.[2]?.r || 0;
+
+      exportData.measured.forEach((row, i) => {
+         const runs = row.runs || [{}, {}, {}];
+         const ptResult = calibEngine.processCalibrationPoint({
+            targetForceKgf: row.target || 0,
+            unit_scale: exportData.unit_scale,
+            series1_m: runs[0].m, series1_mvv: runs[0].r,
+            series2_m: runs[1].m, series2_mvv: runs[1].r,
+            series3_m: runs[2].m, series3_mvv: runs[2].r,
+            zeroBaseline1: z1,
+            zeroBaseline2: z2,
+            zeroBaseline3: z3,
+            coeffA: exportData.coeff_a, coeffB: exportData.coeff_b, coeffC: exportData.coeff_c,
+            maxCapacityKgf: exportData.capacity_kgf,
+            resolution_kgf: 0.01,
+            cal_uncertainty_percent: exportData.ref_unc,
+            temperature_change_c: Math.abs(exportData.temp_after - exportData.temp_before),
+            sensitivity_ppm_per_c: 20
+         });
+         results.push(ptResult);
+      });
+    }
+    exportData.results = results;
+
+    const reportPath = await ExcelEngine.generateReport(exportData);
+    res.download(reportPath, `Calibration_Report_${exportData.project_name}.xlsx`);
+  } catch (err) {
+    console.error('Live Excel Export Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/export/pdf/live', async (req, res) => {
+  try {
+    const liveData = req.body;
+    
+    // We need to re-calculate the results just like buildExportData does, 
+    // or if liveData already has everything, we can just pass it directly.
+    // However, it's safer to ensure it matches the expected structure.
+    const exportData = {
+      project_name: liveData.project_name || 'Live_Project',
+      client_name: liveData.client_name || '',
+      client_address: liveData.client_address || '',
+      calibration_date: liveData.calibration_date || new Date().toISOString(),
+      mode: liveData.mode || 'Compression',
+      capacity_kgf: liveData.capacity_kgf || 0,
+      capacity_text: liveData.capacity_kgf ? liveData.capacity_kgf + ' kgf' : '',
+      instrument_name: liveData.instrument_name || '',
+      serial_number: liveData.serial_number || '',
+      
+      ref_cert: liveData.std_cert || '',
+      ref_date: liveData.std_date || '',
+      ref_model: liveData.std_model || '',
+      ref_sn: liveData.std_sn || '',
+      ref_capacity: liveData.std_cap || '',
+      coeff_a: liveData.coeff_a || 1,
+      coeff_b: liveData.coeff_b || 0,
+      coeff_c: liveData.coeff_c || 0,
+      ref_unc: liveData.uncertainty || 0.02,
+      
+      temp_before: liveData.temp_before || 0,
+      temp_after: liveData.temp_after || 0,
+      hum_before: liveData.hum_before || 0,
+      hum_after: liveData.hum_after || 0,
+      unit_scale: liveData.unit_scale || 0.00980665,
+      output_unit: liveData.output_unit || 'kgf',
+      
+      preloading: liveData.preloading || [],
+      measured: liveData.measured || [],
+      results: liveData.results || []
+    };
+
+    // Calculate full suite for live export to ensure accurate results
+    const results = [];
+    if (exportData.measured && exportData.measured.length > 0) {
+      const z1 = exportData.measured[0]?.runs?.[0]?.r || 0;
+      const z2 = exportData.measured[0]?.runs?.[1]?.r || 0;
+      const z3 = exportData.measured[0]?.runs?.[2]?.r || 0;
+
+      exportData.measured.forEach((row, i) => {
+         const runs = row.runs || [{}, {}, {}];
+         const ptResult = calibEngine.processCalibrationPoint({
+            targetForceKgf: row.target || 0,
+            unit_scale: exportData.unit_scale,
+            series1_m: runs[0].m, series1_mvv: runs[0].r,
+            series2_m: runs[1].m, series2_mvv: runs[1].r,
+            series3_m: runs[2].m, series3_mvv: runs[2].r,
+            zeroBaseline1: z1,
+            zeroBaseline2: z2,
+            zeroBaseline3: z3,
+            coeffA: exportData.coeff_a, coeffB: exportData.coeff_b, coeffC: exportData.coeff_c,
+            maxCapacityKgf: exportData.capacity_kgf,
+            resolution_kgf: 0.01,
+            cal_uncertainty_percent: exportData.ref_unc,
+            temperature_change_c: Math.abs(exportData.temp_after - exportData.temp_before),
+            sensitivity_ppm_per_c: 20
+         });
+         results.push(ptResult);
+      });
+    }
+    exportData.results = results;
+
+    const reportPath = await ExcelEngine.generateReport(exportData);
+    const pdfPath = await ExcelEngine.generatePDF(reportPath);
+    res.download(pdfPath, `Calibration_Report_${exportData.project_name}.pdf`);
+  } catch (err) {
+    console.error('Live PDF Export Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/calibration/test-points/batch', (req, res) => {
   try {
     const { project_id, points } = req.body;
@@ -908,15 +1100,9 @@ app.post('/api/calibration/test-points/batch', (req, res) => {
 
 app.get('/api/config/load-cells', (req, res) => {
   try {
-    let standards = [];
-    const pathCells = path.join(__dirname, 'config', 'load_cells.json');
-    if (fs.existsSync(pathCells)) {
-      standards = JSON.parse(fs.readFileSync(pathCells, 'utf8')).map(s => ({ ...s, is_system: true }));
-    }
-    
     const customStandards = db.prepare('SELECT * FROM load_cells_reference').all();
-    const mappedCustom = customStandards.map(s => ({
-      id: `custom_${s.id}`,
+    const mapped = customStandards.map(s => ({
+      id: s.id,
       db_id: s.id,
       model: s.model,
       capacity: s.capacity_kn + ' kN',
@@ -926,11 +1112,10 @@ app.get('/api/config/load-cells', (req, res) => {
       coeff_c: s.coeff_c_compression,
       uncertainty: s.uncertainty_compression_percent,
       cert_no: s.calibration_certificate,
-      cal_date: s.calibration_date,
-      is_system: false
+      cal_date: s.calibration_date
     }));
 
-    res.json([...standards, ...mappedCustom]);
+    res.json(mapped);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

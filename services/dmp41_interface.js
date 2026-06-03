@@ -287,7 +287,16 @@ class DMP41Interface {
       this.readingBuffer = []; // Clear buffer on tare simulation
       return '0';
     }
-    return '0'; // Success for other commands
+    if (command === 'RAR?') {
+      return '1'; // Simulate having admin rights
+    }
+    if (command === 'RAR') {
+      return '0'; // Simulate accepting admin password
+    }
+    if (command.endsWith('?')) {
+      return '1'; // Generic simulated response for other queries
+    }
+    return '0'; // Success for other setting commands
   }
 }
 

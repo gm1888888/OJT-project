@@ -15,10 +15,70 @@ class DMP41CalibrationApp {
     this.unitConstants = {
       'kgf': 0.00980665,
       'kN': 1.0,
-      'lbf': 0.004448222,
+      'lbf': 0.0044482216152605,
       'N': 0.001,
       'tf': 9.80665
     };
+    this.registeredCommands = [
+      // System Commands
+      { cmd: '/help', cat: 'System', req: 'Standard User', desc: 'Displays all available commands and usage instructions.', example: '/help' },
+      { cmd: '/clear', cat: 'System', req: 'Standard User', desc: 'Clears all terminal output and command history.', example: '/clear' },
+      { cmd: '/save', cat: 'System', req: 'Standard User', desc: 'Saves the current live sheet project.', example: '/save' },
+      { cmd: '/export', cat: 'System', req: 'Standard User', desc: 'Exports the Live Sheet to a PDF report.', example: '/export' },
+      
+      // DMP41 Native Commands
+      { cmd: 'CHS', cat: 'DMP41 Native', req: 'Standard User', desc: 'Select amplifier channel.', example: 'CHS1' },
+      { cmd: 'CHS?', cat: 'DMP41 Native', req: 'Standard User', desc: 'Output of amplifier channels.', example: 'CHS?' },
+      { cmd: 'SRB', cat: 'DMP41 Native', req: 'Standard User', desc: 'Select interface acknowledgement behavior.', example: 'SRB1' },
+      { cmd: 'SRB?', cat: 'DMP41 Native', req: 'Standard User', desc: 'Output of the interface acknowledgement behavior.', example: 'SRB?' },
+      { cmd: 'COF', cat: 'DMP41 Native', req: 'Standard User', desc: 'Change measured value output format.', example: 'COF0' },
+      { cmd: 'COF?', cat: 'DMP41 Native', req: 'Standard User', desc: 'Query measured value output format.', example: 'COF?' },
+      { cmd: 'ISR', cat: 'DMP41 Native', req: 'Standard User', desc: 'Set measured value transfer rate.', example: 'ISR5' },
+      { cmd: 'MSV?', cat: 'DMP41 Native', req: 'Standard User', desc: 'Query current measurement value from DMP41.', example: 'MSV?24' },
+      { cmd: 'MEV?', cat: 'DMP41 Native', req: 'Standard User', desc: 'Output of extended measured values (e.g. temperatures).', example: 'MEV?1' },
+      { cmd: 'STP', cat: 'DMP41 Native', req: 'Standard User', desc: 'Stop measured value output.', example: 'STP' },
+      { cmd: 'TEX', cat: 'DMP41 Native', req: 'Standard User', desc: 'Define measured value separator.', example: 'TEX44,13' },
+      { cmd: 'TEX?', cat: 'DMP41 Native', req: 'Standard User', desc: 'Output measured value separator.', example: 'TEX?' },
+      { cmd: 'CMR', cat: 'DMP41 Native', req: 'Standard User', desc: 'Measuring range switchover (Range 1/2).', example: 'CMR2' },
+      { cmd: 'CMR?', cat: 'DMP41 Native', req: 'Standard User', desc: 'Output of measuring range.', example: 'CMR?' },
+      
+      // Diagnostic Commands
+      { cmd: 'XST?', cat: 'Diagnostic', req: 'Standard User', desc: 'Extended status query (outputs bit-coded error/status).', example: 'XST?' },
+      { cmd: 'EST?', cat: 'Diagnostic', req: 'Standard User', desc: 'Returns the extended status once and then sets it to 0.', example: 'EST?' },
+      { cmd: 'RS2?', cat: 'Diagnostic', req: 'Standard User', desc: 'RS232 adapter detected query.', example: 'RS2?' },
+      { cmd: 'CIN?', cat: 'Diagnostic', req: 'Standard User', desc: 'Get Channel Information (special command).', example: 'CIN?' },
+      { cmd: 'RCL?', cat: 'Diagnostic', req: 'Standard User', desc: 'Remote Client Connection Query (shows connected clients).', example: 'RCL?' },
+      { cmd: 'VIN?', cat: 'Diagnostic', req: 'Standard User', desc: 'Returns version information.', example: 'VIN?' },
+      { cmd: 'AID?', cat: 'Diagnostic', req: 'Standard User', desc: 'Output of amplifier identification.', example: 'AID?' },
+      { cmd: '*IDN?', cat: 'Diagnostic', req: 'Standard User', desc: 'Output of device identification.', example: '*IDN?' },
+      { cmd: 'TED?', cat: 'Diagnostic', req: 'Standard User', desc: 'Transducer electronic datasheet Query (TID/TEDS).', example: 'TED?3,1' },
+      { cmd: 'DEN?', cat: 'Diagnostic', req: 'Standard User', desc: 'Output device name.', example: 'DEN?' },
+      
+      // Administrative Commands
+      { cmd: 'RAR', cat: 'Administrative', req: 'Standard User', desc: 'Request administrator rights with password.', example: 'RAR1234' },
+      { cmd: 'RAR?', cat: 'Administrative', req: 'Standard User', desc: 'Query assigned administrator rights.', example: 'RAR?' },
+      { cmd: 'CHP', cat: 'Administrative', req: 'Administrator', desc: 'Change password (old, new).', example: 'CHP1234,12345' },
+      { cmd: 'SWA', cat: 'Administrative', req: 'Administrator', desc: 'Start with/without administrator rights.', example: 'SWA1234,1' },
+      { cmd: 'ASA', cat: 'Administrative', req: 'Administrator', desc: 'Input bridge excitation voltage and transducer type.', example: 'ASA1,1' },
+      { cmd: 'ASS', cat: 'Administrative', req: 'Administrator', desc: 'Select amplifier input signal (ZERO/CAL/MEAS).', example: 'ASS2' },
+      { cmd: 'AFS', cat: 'Administrative', req: 'Administrator', desc: 'Filter switchover (fc 1/2).', example: 'AFS1' },
+      { cmd: 'ASF', cat: 'Administrative', req: 'Administrator', desc: 'Input of cut-off frequency and filter characteristic.', example: 'ASF 2,4,0' },
+      { cmd: 'BDR', cat: 'Administrative', req: 'Administrator', desc: 'Set baud rate of serial interfaces.', example: 'BDR19200,2,1,1' },
+      { cmd: 'CDW', cat: 'Administrative', req: 'Administrator', desc: 'Start zero setting/input zero value (balance).', example: 'CDW' },
+      { cmd: 'CPV', cat: 'Administrative', req: 'Administrator', desc: 'Clear peak value memory.', example: 'CPV' },
+      { cmd: 'ENU', cat: 'Administrative', req: 'Administrator', desc: 'Input of engineering unit.', example: 'ENU 2,"KG  "' },
+      { cmd: 'IAD', cat: 'Administrative', req: 'Administrator', desc: 'Input display full scale, decimal point, step.', example: 'IAD2,10000,3,4' },
+      { cmd: 'LTB', cat: 'Administrative', req: 'Administrator', desc: 'Linearization of transducer characteristic curve.', example: 'LTB...' },
+      { cmd: 'RES', cat: 'Administrative', req: 'Administrator', desc: 'Execute warm start (Reset).', example: 'RES' },
+      { cmd: 'SGN', cat: 'Administrative', req: 'Administrator', desc: 'Reversal of preceding sign.', example: 'SGN1' },
+      { cmd: 'TAR', cat: 'Administrative', req: 'Administrator', desc: 'Tare the current DMP41 reading.', example: 'TAR' },
+      { cmd: 'TDD', cat: 'Administrative', req: 'Administrator', desc: 'Saves amplifier settings and comments.', example: 'TDD2' },
+      { cmd: 'UCC', cat: 'Administrative', req: 'Administrator', desc: 'Enter channel names.', example: 'UCC"My Channel"' },
+      { cmd: 'SLN', cat: 'Administrative', req: 'Administrator', desc: 'Assign slot name.', example: 'SLN1,"TestSlot"' },
+      { cmd: 'DEN', cat: 'Administrative', req: 'Administrator', desc: 'Assign device name.', example: 'DEN"DMP41 Schmidt"' },
+      { cmd: 'DRS', cat: 'Administrative', req: 'Administrator', desc: 'Reset ranges/hardware to factory settings.', example: 'DRS1' },
+      { cmd: 'BGL', cat: 'Administrative', req: 'Administrator', desc: 'Background lighting intensity and dimming.', example: 'BGL100,25,600' }
+    ];
     this.loggerData = {
       preloading: [
         { target: 0, runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }] },
@@ -363,10 +423,10 @@ class DMP41CalibrationApp {
   }
 
   async deleteStandard(standardId) {
-    if (!standardId || !standardId.startsWith('custom_')) { alert("Cannot delete this standard."); return; }
-    if (!confirm("Delete this custom standard?")) return;
+    if (!standardId || standardId === "") { alert("Cannot delete this standard."); return; }
+    if (!confirm("Delete this reference standard?")) return;
     try {
-        const res = await fetch(`/api/config/load-cells/${standardId.replace('custom_', '')}`, { method: 'DELETE' });
+        const res = await fetch(`/api/config/load-cells/${standardId}`, { method: 'DELETE' });
         if (res.ok) { alert("Standard deleted."); await this.initLoadCellSelector(); }
     } catch (e) { console.error(e); }
   }
@@ -375,14 +435,11 @@ class DMP41CalibrationApp {
     try {
       const res = await fetch('/api/config/load-cells'); this.loadCells = await res.json();
       const sel = document.getElementById('lc-selector'); sel.innerHTML = '<option value="">-- Select Standard --</option>';
-      const sys = this.loadCells.filter(lc => lc.is_system), cst = this.loadCells.filter(lc => !lc.is_system);
-      const addGrp = (lbl, arr) => {
-        if (arr.length === 0) return;
-        const g = document.createElement('optgroup'); g.label = lbl;
-        arr.forEach(lc => { const o = document.createElement('option'); o.value = lc.id; o.textContent = `${lc.model} (${lc.capacity})`; g.appendChild(o); });
-        sel.appendChild(g);
-      };
-      addGrp("System Standards", sys); addGrp("User Defined Standards", cst);
+      const g = document.createElement('optgroup'); g.label = "Reference Standards";
+      this.loadCells.forEach(lc => {
+        const o = document.createElement('option'); o.value = lc.id; o.textContent = `${lc.model} (${lc.capacity})`; g.appendChild(o);
+      });
+      sel.appendChild(g);
       sel.onchange = (e) => {
         const s = this.loadCells.find(lc => lc.id == e.target.value);
         if (s) {
@@ -430,6 +487,184 @@ class DMP41CalibrationApp {
     this.checkHardwareStatus();
   }
 
+  async sendTerminalCommand() {
+    const input = document.getElementById('terminal-input');
+    const output = document.getElementById('terminal-output');
+    if (!input || !output) return;
+    const cmd = input.value.trim();
+    if (!cmd) return;
+    
+    input.value = '';
+    output.innerHTML += `<div><span style="color: #64748b;">></span> ${cmd}</div>`;
+    output.scrollTop = output.scrollHeight;
+
+    const lowerCmd = cmd.toLowerCase();
+
+    if (lowerCmd === '/clear') {
+      output.innerHTML = '';
+      return;
+    }
+
+    if (lowerCmd.startsWith('/help')) {
+      const args = cmd.split(/\s+/).slice(1);
+      const query = args.length > 0 ? args.join(' ').toLowerCase() : '';
+      
+      const wrapText = (text, maxLen) => {
+        const words = text.split(' ');
+        const lines = [];
+        let currentLine = '';
+        words.forEach(word => {
+          if ((currentLine + word).length > maxLen) {
+            if (currentLine) {
+              lines.push(currentLine.trim());
+              currentLine = word + ' ';
+            } else {
+              lines.push(word.slice(0, maxLen));
+              currentLine = word.slice(maxLen) + ' ';
+            }
+          } else {
+            currentLine += word + ' ';
+          }
+        });
+        if (currentLine) lines.push(currentLine.trim());
+        return lines.length ? lines : [''];
+      };
+
+      const pad = (str, len) => (str + ' '.repeat(len)).substring(0, len);
+
+      const buildAsciiTable = (category, commands) => {
+        const TERMINAL_WIDTH = 80;
+        const col1Width = 14; 
+        const col3Width = 16; 
+        const col2Width = TERMINAL_WIDTH - col1Width - col3Width - 10;
+        
+        const separator = `+${'-'.repeat(col1Width + 2)}+${'-'.repeat(col2Width + 2)}+${'-'.repeat(col3Width + 2)}+`;
+        
+        let out = `<div style="color: #60a5fa; margin-top: 15px; margin-bottom: 5px; font-weight: bold; font-family: 'JetBrains Mono', monospace; font-size: 0.85em;">[ ${category.toUpperCase()} COMMANDS ]</div>`;
+        out += `<pre style="margin: 0; font-family: 'JetBrains Mono', monospace; color: #10b981; font-size: 0.85em; line-height: 1.2; white-space: pre-wrap;">`;
+        out += `${separator}\n`;
+        out += `| ${pad('Command', col1Width)} | ${pad('Description', col2Width)} | ${pad('Permission', col3Width)} |\n`;
+        out += `${separator}\n`;
+        
+        commands.forEach(c => {
+          const c1Lines = wrapText(c.cmd, col1Width);
+          const c2Lines = wrapText(c.desc, col2Width);
+          const c3Lines = wrapText(c.req, col3Width);
+          const maxL = Math.max(c1Lines.length, c2Lines.length, c3Lines.length);
+          
+          for (let i = 0; i < maxL; i++) {
+            out += `| ${pad(c1Lines[i] || '', col1Width)} | ${pad(c2Lines[i] || '', col2Width)} | ${pad(c3Lines[i] || '', col3Width)} |\n`;
+          }
+        });
+        out += `${separator}</pre>`;
+        return out;
+      };
+
+      let helpOutput = '';
+      const allCategories = [...new Set(this.registeredCommands.map(c => c.cat))];
+      
+      if (!query) {
+        allCategories.forEach(cat => {
+          helpOutput += buildAsciiTable(cat, this.registeredCommands.filter(c => c.cat === cat));
+        });
+      } else {
+        const matchedCmd = this.registeredCommands.find(c => c.cmd.toLowerCase() === query || c.cmd.toLowerCase() === '/' + query);
+        if (matchedCmd) {
+          helpOutput += `<div style="border: 1px solid #555; padding: 10px; margin-top: 10px; background-color: #111; font-family: 'JetBrains Mono', monospace; font-size: 0.85em;">
+<div style="color: #ffcc00; font-size: 1.1em; margin-bottom: 10px; font-weight: bold;">Command: ${matchedCmd.cmd}</div>
+<table style="width: 100%; border-collapse: collapse; color: #10b981; font-family: 'JetBrains Mono', monospace;">
+  <tr><td style="width: 120px; color: #a3a3a3; padding: 4px 0; vertical-align: top;">Description:</td><td style="padding: 4px 0; word-wrap: break-word;">${matchedCmd.desc}</td></tr>
+  <tr><td style="width: 120px; color: #a3a3a3; padding: 4px 0; vertical-align: top;">Syntax:</td><td style="padding: 4px 0;">${matchedCmd.cmd}</td></tr>
+  <tr><td style="width: 120px; color: #a3a3a3; padding: 4px 0; vertical-align: top;">Category:</td><td style="padding: 4px 0;">${matchedCmd.cat}</td></tr>
+  <tr><td style="width: 120px; color: #a3a3a3; padding: 4px 0; vertical-align: top;">Permissions:</td><td style="padding: 4px 0;">${matchedCmd.req}</td></tr>
+  <tr><td style="width: 120px; color: #a3a3a3; padding: 4px 0; vertical-align: top;">Example:</td><td style="padding: 4px 0; color: #60a5fa;">${matchedCmd.example}</td></tr>
+</table>
+</div>`;
+        } else {
+          const matchedCats = allCategories.filter(c => c.toLowerCase().includes(query));
+          if (matchedCats.length > 0) {
+            matchedCats.forEach(matchedCat => {
+              helpOutput += buildAsciiTable(matchedCat, this.registeredCommands.filter(c => c.cat === matchedCat));
+            });
+          } else {
+            helpOutput += `<div style="color: #ef4444; margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.85em;">Unknown command or category: <span style="color: #fff;">${query}</span></div>`;
+          }
+        }
+      }
+      
+      output.innerHTML += helpOutput;
+      output.scrollTop = output.scrollHeight;
+      return;
+    }
+
+    if (lowerCmd === '/save') {
+      if (!this.currentProject) {
+        output.innerHTML += `<div style="color: #ef4444;">Operation failed: No active project loaded.</div>`;
+      } else {
+        await this.saveToHistory(false, false);
+        output.innerHTML += `<div style="color: #10b981;">Project saved successfully.</div>`;
+      }
+      output.scrollTop = output.scrollHeight;
+      return;
+    }
+
+    if (lowerCmd === '/export') {
+      if (!this.currentProject) {
+        output.innerHTML += `<div style="color: #ef4444;">Operation failed: No active project loaded.</div>`;
+      } else {
+        await this.syncLoggerToExcel();
+        output.innerHTML += `<div style="color: #10b981;">Export initiated successfully.</div>`;
+      }
+      output.scrollTop = output.scrollHeight;
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/hardware/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd })
+      });
+      const data = await res.json();
+      
+      let resText = data.response;
+      
+      // Improve Terminal Command Responses
+      if (res.ok) {
+        let msg = "Command executed successfully.";
+        const uCmd = cmd.toUpperCase();
+        if (resText === "0") {
+            if (uCmd.startsWith('TAR')) msg = "Tare operation executed successfully.";
+            else if (uCmd.startsWith('CDW')) msg = "Zero point calibration set successfully.";
+            else if (uCmd.startsWith('RAR')) msg = "Administrator privileges granted successfully.";
+            else if (uCmd.startsWith('ASA')) msg = "Device configuration updated (Sensor Adaptation).";
+            else if (uCmd.startsWith('BDR')) msg = "Serial communication settings updated.";
+            else if (uCmd.startsWith('CHS')) msg = "Amplifier channel selected successfully.";
+            else msg = "Command executed successfully (0).";
+        } else if (resText === "1") {
+            msg = "Hardware ready / operation completed (1).";
+        } else if (resText === "true") {
+            msg = "Status: Active/True.";
+        } else if (resText === "false") {
+            msg = "Status: Inactive/False.";
+        } else if (resText === "?") {
+            msg = "Command Error: Invalid syntax, parameter, or state (?).";
+        } else if (resText === undefined) {
+            msg = "Communication timeout occurred.";
+        } else {
+            msg = `Response: ${resText}`;
+        }
+        
+        output.innerHTML += `<div style="color: #10b981;">${msg}</div>`;
+      } else {
+        output.innerHTML += `<div style="color: #ef4444;">Error: ${data.error || 'Failed'}</div>`;
+      }
+    } catch (err) {
+      output.innerHTML += `<div style="color: #ef4444;">Error: ${err.message}</div>`;
+    }
+    output.scrollTop = output.scrollHeight;
+  }
+
   async setHardwareMode(mode) {
     try { await fetch('/api/hardware/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) }); this.checkHardwareStatus(); }
     catch (err) { console.error(err); }
@@ -449,7 +684,7 @@ class DMP41CalibrationApp {
         if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = val.toFixed(2);   
         this.updateChart(def);
       } catch (err) { console.error(err); }
-    }, 150);
+    }, 300);
   }
 
   stopPolling() { this.isPolling = false; clearInterval(this.pollInterval); document.getElementById('btn-start-polling').disabled = false; document.getElementById('btn-stop-polling').disabled = true; document.getElementById('reading-mvv').textContent = '0.00000'; if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = '0.00'; this.updateChart(0); }
@@ -733,6 +968,12 @@ class DMP41CalibrationApp {
       el.textContent = unit;
     });
 
+    const conversionText = document.getElementById('ui-conversion-text');
+    if (conversionText) {
+      const factor = this.unitConstants[unit] || 1;
+      conversionText.textContent = `Conversion: 1 ${unit} = ${factor} kN`;
+    }
+
     this.renderLogger();
   }
 
@@ -752,10 +993,74 @@ class DMP41CalibrationApp {
   }
 
   async syncLoggerToExcel() {
-    if (!this.currentProject) { alert("Save project first."); return; }
-    if (!confirm("Export to Excel?")) return;
-    await this.saveToHistory();
-    window.location.href = `/api/export/excel/${this.currentProject.id}`;
+    if (!confirm("Export Live Sheet to PDF?")) return;
+    
+    // Build live export data
+    const liveData = this.buildLiveExportData();
+
+    try {
+      const res = await fetch('/api/export/pdf/live', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(liveData)
+      });
+      if (!res.ok) throw new Error("Export failed");
+      
+      // Handle file download from fetch
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Calibration_Report_${liveData.project_name || 'Live'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to export live sheet.");
+    }
+  }
+
+  buildLiveExportData() {
+    const p = this.currentProject || {};
+    const d = (id) => document.getElementById(id)?.value || '';
+    return {
+      project_name: d('t1-ref-no') || 'Live_Project',
+      client_name: d('t1-client-name'),
+      client_address: d('t1-client-address'),
+      instrument_name: d('t1-item'),
+      serial_number: d('t1-ind-sn'),
+      capacity_kgf: parseFloat(d('t1-capacity')) || 0,
+      range_min_kgf: 0,
+      range_max_kgf: parseFloat(d('t1-capacity')) || 0,
+      input_unit: 'kgf',
+      output_unit: this.currentUnit || 'kgf',
+      calibration_date: d('t1-date') || new Date().toISOString(),
+      mode: d('t1-mode') || 'Compression',
+      
+      // Standard
+      std_cert: d('t4-cert'),
+      std_date: d('t4-date'),
+      std_model: d('t4-model'),
+      std_sn: d('t4-sn'),
+      std_cap: parseFloat(d('t4-cap')) || 0,
+      coeff_a: parseFloat(d('t4-a')) || 0,
+      coeff_b: parseFloat(d('t4-b')) || 0,
+      coeff_c: parseFloat(d('t4-c')) || 0,
+      uncertainty: parseFloat(d('t4-u')) || 0,
+      
+      // Environment
+      temp_before: parseFloat(d('t5-temp-b')) || 0,
+      temp_after: parseFloat(d('t5-temp-a')) || 0,
+      hum_before: parseFloat(d('t5-hum-b')) || 0,
+      hum_after: parseFloat(d('t5-hum-a')) || 0,
+      unit_scale: this.unitConstants[this.currentUnit] || 0.00980665,
+      
+      preloading: this.loggerData.preloading,
+      measured: this.loggerData.measured,
+      results: this.lastResults || []
+    };
   }
 
   addTestPoint(tableType) {
