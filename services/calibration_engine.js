@@ -7,7 +7,7 @@ class CalibrationEngine {
   calculateEquivalentForce(rawDeflectionMvv, coeffA, coeffB, coeffC) {
     const D = rawDeflectionMvv;
     const F = (coeffA * D) + (coeffB * Math.pow(D, 2)) + (coeffC * Math.pow(D, 3));
-    return parseFloat(F.toFixed(6));
+    return F;
   }
 
   calculateSampleVariance(values) {
@@ -69,15 +69,15 @@ class CalibrationEngine {
     return {
       combined_uncertainty_kn: parseFloat((U_expanded / 2).toFixed(9)),
       expanded_uncertainty_kn: parseFloat(U_expanded.toFixed(9)),
-      relative_combined_percent: parseFloat(w_combined.toFixed(6)),
-      relative_uncertainty_percent: parseFloat(W_expanded.toFixed(4)),
+      relative_combined_percent: parseFloat(w_combined.toFixed(7)),
+      relative_uncertainty_percent: parseFloat(W_expanded.toFixed(7)),
       components: {
-        repeatability: parseFloat(w_rep.toFixed(6)),
-        resolution: parseFloat(w_res.toFixed(6)),
-        tare: parseFloat(w_tare.toFixed(6)),
-        calibration: parseFloat(w_cal.toFixed(6)),
-        drift: parseFloat(w_drift.toFixed(6)),
-        temperature: parseFloat(w_temp.toFixed(6))
+        repeatability: parseFloat(w_rep.toFixed(7)),
+        resolution: parseFloat(w_res.toFixed(7)),
+        tare: parseFloat(w_tare.toFixed(7)),
+        calibration: parseFloat(w_cal.toFixed(7)),
+        drift: parseFloat(w_drift.toFixed(7)),
+        temperature: parseFloat(w_temp.toFixed(7))
       }
     };
   }

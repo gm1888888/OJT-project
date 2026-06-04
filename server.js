@@ -400,16 +400,17 @@ app.post('/api/hardware/mode', async (req, res) => {
 
 app.post('/api/hardware/connect', async (req, res) => {
   try {
-    // Dynamically apply settings from the UI payload
+    console.log(`[API] Connection request received: ${JSON.stringify(req.body)}`);
     if (req.body && req.body.tcp) {
       dmp41.host = req.body.tcp.ip || dmp41.host;
       dmp41.port = req.body.tcp.port || dmp41.port;
     }
     
     await dmp41.connect();
+    console.log('[API] Connection established via LAN');
     res.json({ status: 'success', connected: true });
   } catch (err) {
-    // If it fails, it's caught here, but dmp41_interface sets it to standby.
+    console.error(`[API] Connection failed: ${err.message}`);
     res.status(500).json({ status: 'failed', error: err.message });
   }
 });

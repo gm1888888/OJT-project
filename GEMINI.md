@@ -73,7 +73,7 @@ The project includes a robust `Start_System.bat` file designed for a "one-click"
 ## Final Verification Status
 - [x] **Export Metadata Mapping**: Cert No. and Calibration Date from custom standards are verified in `excel_bridge.py`.
 - [x] **Duplicate Prevention**: Backend checks for unique serial numbers implemented in `server.js`.
-- [x] **Portability Audit**: `Start_System.bat` updated to support dynamic XAMPP paths and resolved file locking conflicts during startup.
+- [x] **Portability Audit**: Removed legacy XAMPP dependencies from `Start_System.bat` and resolved file locking conflicts during startup.
 - [x] **Startup Diagnostics**: Added automatic surfacing of `node.log` on startup failure.
 - [x] **Input Sanitization**: Enhanced validation for polynomial coefficients in the modal.
 - [x] **CSS Refinement**: Polished grid layout for the "Manage Standard" modal.

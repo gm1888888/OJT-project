@@ -35,7 +35,7 @@ def populate_new_format(template_path, output_path, data):
         unit_scale = data.get("unit_scale", 0.00980665)
         output_unit = data.get("output_unit", "kgf")
         
-        FMT_MVV = "0.00000"
+        FMT_MVV = "0.0000000"
         FMT_FORCE_2 = "0.00"
         FMT_FORCE_4 = "0.0000"
         FMT_FORCE_5 = "0.00000"

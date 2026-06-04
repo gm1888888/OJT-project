@@ -51,9 +51,16 @@ echo [1/4] Checking Node.js and Python...
 :: Check Node.js
 node -v >nul 2>&1
 if !errorlevel! neq 0 (
-    echo [ERROR] Node.js not found. Please install it.
+    echo [INFO] Node.js not found. Installing via winget...
+    winget install -e --id OpenJS.NodeJS --accept-source-agreements --accept-package-agreements
+    if !errorlevel! neq 0 (
+        echo [ERROR] Failed to install Node.js automatically. Please install it manually.
+        pause
+        goto MENU
+    )
+    echo [SUCCESS] Node.js installed. Please restart this console to apply PATH changes.
     pause
-    goto MENU
+    exit /b
 )
 
 :: Check Python
@@ -62,9 +69,16 @@ python --version >nul 2>&1 && set "PYTHON_CMD=python"
 py --version >nul 2>&1 && set "PYTHON_CMD=py"
 
 if "!PYTHON_CMD!"=="" (
-    echo [ERROR] Python not found. Please install it.
+    echo [INFO] Python not found. Installing via winget...
+    winget install -e --id Python.Python.3.11 --accept-source-agreements --accept-package-agreements
+    if !errorlevel! neq 0 (
+        echo [ERROR] Failed to install Python automatically. Please install it manually.
+        pause
+        goto MENU
+    )
+    echo [SUCCESS] Python installed. Please restart this console to apply PATH changes.
     pause
-    goto MENU
+    exit /b
 )
 
 :: Check dependencies
@@ -101,7 +115,10 @@ set "RETRY=0"
 set /a RETRY+=1
 if !RETRY! gtr 20 (
     echo.
-    echo [ERROR] Timeout. Check logs\node.log
+    echo [ERROR] Startup timeout. Displaying recent logs from node.log:
+    echo ---------------------------------------------------
+    type "%NODE_LOG%"
+    echo ---------------------------------------------------
     pause
     goto MENU
 )
@@ -124,7 +141,7 @@ if !errorlevel! equ 0 (
 :: STOP SYSTEM
 :: ---------------------------------------------------------
 :STOP_SYSTEM
-echo Stopping...
+echo Stopping System...
 taskkill /F /IM node.exe >nul 2>&1
 taskkill /F /IM excel.exe >nul 2>&1
 echo Done.
@@ -135,6 +152,7 @@ goto MENU
 :: RESTART SYSTEM
 :: ---------------------------------------------------------
 :RESTART_SYSTEM
+echo Restarting System...
 taskkill /F /IM node.exe >nul 2>&1
 taskkill /F /IM excel.exe >nul 2>&1
 timeout /t 2 /nobreak >nul

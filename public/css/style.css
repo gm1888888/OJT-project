@@ -633,29 +633,4 @@ tbody tr:nth-child(even) {
   display: none !important;
 }
 
-/* Workflow Blocker Styles */
-.workflow-locked {
-  opacity: 0.5;
-  pointer-events: none;
-  filter: grayscale(100%);
-  transition: all 0.3s ease;
-  position: relative;
-  user-select: none;
-}
 
-.workflow-locked::after {
-  content: "🔒 Locked: Complete previous step";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(0,0,0,0.8);
-  color: white;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 1.1em;
-  font-weight: bold;
-  pointer-events: none;
-  z-index: 10;
-  text-shadow: none;
-}

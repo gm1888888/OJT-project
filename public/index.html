@@ -120,7 +120,7 @@
             <h3 style="font-size: 1em; margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Connection Settings</h3>
             <p style="margin-bottom: 5px;">Connection: <span id="conn-status">Checking...</span></p>
 
-            <div style="display: flex; gap: 5px; margin-bottom: 8px;">
+            <div id="conn-lan-inputs" style="display: flex; gap: 5px; margin-bottom: 8px;">
               <input type="text" id="main-ip" placeholder="IP Address" value="192.168.1.100" style="flex: 2; padding: 4px;">
               <input type="number" id="main-port" placeholder="Port" value="1234" style="flex: 1; padding: 4px;">
             </div>
@@ -144,7 +144,7 @@
             </div>
             
             <div style="margin-top: 10px; display: flex; gap: 5px;">
-              <button id="btn-connect" style="flex: 1;" disabled>Connect</button>
+              <button id="btn-connect" style="flex: 1;">Connect</button>
               <button id="btn-terminal" style="flex: 1;">Terminal</button>
             </div>
           </div>
@@ -163,7 +163,7 @@
               
               <!-- Primary: mV/V -->
               <div style="display: flex; align-items: baseline;">
-                <div class="value" id="reading-mvv">0.000000</div>
+                <div class="value" id="reading-mvv">0.0000000</div>
                 <div class="unit">mV/V</div>
               </div>
 

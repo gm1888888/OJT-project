@@ -169,27 +169,6 @@ class DMP41CalibrationApp {
       if (btnTerminalSend) btnTerminalSend.disabled = true;
       if (this.isPolling) this.stopPolling();
     }
-
-    const hwPanel = document.getElementById('hardware-status');
-    const monitorPanel = document.getElementById('live-monitor');
-    const excelPanel = document.getElementById('excel-full-replica');
-    const manualRefNo = document.getElementById('t1-ref-no')?.value.trim();
-    const manualCapacity = document.getElementById('t1-capacity')?.value.trim();
-    const hasValidProject = this.currentProject || (manualRefNo && manualCapacity);
-
-    if (!hasValidProject) {
-      if (hwPanel) hwPanel.classList.add('workflow-locked');
-      if (monitorPanel) monitorPanel.classList.add('workflow-locked');
-      if (excelPanel) excelPanel.classList.add('workflow-locked');
-    } else if (!isActuallyConnected && !this.demoMode) {
-      if (hwPanel) hwPanel.classList.remove('workflow-locked');
-      if (monitorPanel) monitorPanel.classList.add('workflow-locked');
-      if (excelPanel) excelPanel.classList.add('workflow-locked');
-    } else {
-      if (hwPanel) hwPanel.classList.remove('workflow-locked');
-      if (monitorPanel) monitorPanel.classList.remove('workflow-locked');
-      if (excelPanel) excelPanel.classList.remove('workflow-locked');
-    }
   }
 
   async loadSettings() {
@@ -217,7 +196,7 @@ class DMP41CalibrationApp {
 
   initEventListeners() {
     document.getElementById('btn-connect').addEventListener('click', () => this.triggerConnection());
-    
+
     const btnAddStd = document.getElementById('btn-add-standard');
     if(btnAddStd) btnAddStd.onclick = () => this.openStandardModal();
     const btnEditStd = document.getElementById('btn-edit-standard');
@@ -479,10 +458,20 @@ class DMP41CalibrationApp {
   async triggerConnection() {
     await this.syncProjectData();
     document.getElementById('conn-status').textContent = 'Connecting...';
-    const ip = document.getElementById('main-ip')?.value || '192.168.1.100', port = document.getElementById('main-port')?.value || '1234', ch = document.getElementById('set-channel')?.value || '1';
+    
+    const ch = document.getElementById('set-channel')?.value || '1';
+    let payload = { channel: ch };
+    let savePayload = { channel: ch, connection: {} };
+
+    const ip = document.getElementById('main-ip')?.value || '192.168.1.100';
+    const port = document.getElementById('main-port')?.value || '1234';
+    payload.tcp = { ip, port };
+    savePayload.connection.tcp = { ip, port };
+    savePayload.connection.method = 'LAN';
+
     try {
-      await fetch('/api/hardware/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tcp: { ip, port }, channel: ch }) });
-      await fetch('/api/settings/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ connection: { tcp: { ip, port } }, channel: ch }) });
+      await fetch('/api/hardware/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      await fetch('/api/settings/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(savePayload) });
     } catch (err) { console.error(err); }
     this.checkHardwareStatus();
   }
@@ -677,17 +666,22 @@ class DMP41CalibrationApp {
         const res = await fetch('/api/hardware/read?channel=1&type=24'); const d = await res.json();
         const def = d.raw_deflection || 0; this.currentReadings.push({ timestamp: new Date(), raw_mvv: def });
         if (this.currentReadings.length > 50) this.currentReadings.shift();
-        document.getElementById('reading-mvv').textContent = def.toFixed(5);
+        document.getElementById('reading-mvv').textContent = def.toFixed(7);
         const a = parseFloat(document.getElementById('t4-a')?.value || 1), b = parseFloat(document.getElementById('t4-b')?.value || 0), c = parseFloat(document.getElementById('t4-c')?.value || 0);
-        const f = (a * def) + (b * Math.pow(def, 2)) + (c * Math.pow(def, 3));
-        const val = f / this.unitConstants[this.currentUnit];
+        const zeroRef = (this.loggerData && this.loggerData.measured && this.loggerData.measured[0] && this.loggerData.measured[0].runs[0].r !== null) ? this.loggerData.measured[0].runs[0].r : 0;
+        const netDef = def - zeroRef;
+        const fKn = (a * netDef) + (b * Math.pow(netDef, 2)) + (c * Math.pow(netDef, 3));
+        const val = fKn / (this.unitConstants[this.currentUnit] || 1);
+        
+        console.log(`[Diagnostic] Force Calculation:\n - Raw mV/V reading: ${def.toFixed(7)}\n - Zero/Tare offset: ${zeroRef.toFixed(7)}\n - Net mV/V value: ${netDef.toFixed(7)}\n - Calibration Coefficients: a=${a}, b=${b}, c=${c}\n - Intermediate Force (kN): ${fKn.toFixed(7)}\n - Unit Scaling Factor (${this.currentUnit}): ${this.unitConstants[this.currentUnit]}\n - Final calculated force: ${val.toFixed(2)} ${this.currentUnit}`);
+        
         if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = val.toFixed(2);   
         this.updateChart(def);
       } catch (err) { console.error(err); }
     }, 300);
   }
 
-  stopPolling() { this.isPolling = false; clearInterval(this.pollInterval); document.getElementById('btn-start-polling').disabled = false; document.getElementById('btn-stop-polling').disabled = true; document.getElementById('reading-mvv').textContent = '0.00000'; if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = '0.00'; this.updateChart(0); }
+  stopPolling() { this.isPolling = false; clearInterval(this.pollInterval); document.getElementById('btn-start-polling').disabled = false; document.getElementById('btn-stop-polling').disabled = true; document.getElementById('reading-mvv').textContent = '0.0000000'; if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = '0.00'; this.updateChart(0); }
 
   async createProject() {
     const d = document.getElementById('np-date').value, m = document.getElementById('np-mode').value, n = document.getElementById('np-name').value, c = document.getElementById('np-capacity').value, i = document.getElementById('np-item').value, r = document.getElementById('np-range').value, lm = document.getElementById('np-lc-make')?.value || '', ls = document.getElementById('np-lc-sn')?.value || '', im = document.getElementById('np-ind-make')?.value || '', is = document.getElementById('np-ind-sn')?.value || '', inc = document.getElementById('np-increment').value, res = document.getElementById('np-resolution').value;
@@ -979,7 +973,7 @@ class DMP41CalibrationApp {
 
   formatCellValue(val, isTarget = false, isReading = false) {
     if (val === null || val === undefined || val === "") return "";
-    return isReading ? parseFloat(val).toFixed(5) : parseFloat(val);
+    return isReading ? parseFloat(val).toFixed(7) : parseFloat(val);
   }
 
   initChart() {
@@ -1126,7 +1120,7 @@ class DMP41CalibrationApp {
         const v1m = this.formatCellValue(row.runs[0].m); const v1r = this.formatCellValue(row.runs[0].r, false, true);
         const v2m = this.formatCellValue(row.runs[1].m); const v2r = this.formatCellValue(row.runs[1].r, false, true);
         const v3m = this.formatCellValue(row.runs[2].m); const v3r = this.formatCellValue(row.runs[2].r, false, true);
-        return `<tr><td>${idx === 0 ? '0.0' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th')}</td><td><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${vt === "" ? 'l-t placeholder-dull' : 'l-t'}" data-idx="${idx}" value="${vt}" placeholder="- -"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td><td class="calculated" id="${prefix}t3-meanforce-${idx}">${row.meanIndicatedForce ? row.meanIndicatedForce.toFixed(2) : '- -'}</td><td class="calculated" id="${prefix}t3-meandef-${idx}">${row.meanRawDeflection ? row.meanRawDeflection.toFixed(5) : '- -'}</td></tr>`;
+        return `<tr><td>${idx === 0 ? '0.0' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th')}</td><td><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${vt === "" ? 'l-t placeholder-dull' : 'l-t'}" data-idx="${idx}" value="${vt}" placeholder="- -"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td><td class="calculated" id="${prefix}t3-meanforce-${idx}">${row.meanIndicatedForce ? row.meanIndicatedForce.toFixed(2) : '- -'}</td><td class="calculated" id="${prefix}t3-meandef-${idx}">${row.meanRawDeflection ? row.meanRawDeflection.toFixed(7) : '- -'}</td></tr>`;
       }).join('');
     }
 
@@ -1154,7 +1148,7 @@ class DMP41CalibrationApp {
     const forceEl = document.getElementById(`t3-meanforce-${idx}`);
     const defEl = document.getElementById(`t3-meandef-${idx}`);
     if (forceEl) forceEl.textContent = (row.meanIndicatedForce || 0).toFixed(2);
-    if (defEl) defEl.textContent = (row.meanRawDeflection || 0).toFixed(5);
+    if (defEl) defEl.textContent = (row.meanRawDeflection || 0).toFixed(7);
   }
 
   calculateFullSuite(prefix = '') {
@@ -1194,7 +1188,7 @@ class DMP41CalibrationApp {
       const m1 = row.runs[0].m !== null ? (row.runs[0].m * targetConst).toFixed(4) : '';
       const m2 = row.runs[1].m !== null ? (row.runs[1].m * targetConst).toFixed(4) : '';
       const m3 = row.runs[2].m !== null ? (row.runs[2].m * targetConst).toFixed(4) : '';
-      return `<tr><td>${row.point}</td><td class="calculated">${nets[0] !== null ? m1 : ''}</td><td class="calculated">${nets[0] !== null ? nets[0].toFixed(5) : ''}</td><td class="calculated">${nets[1] !== null ? m2 : ''}</td><td class="calculated">${nets[1] !== null ? nets[1].toFixed(5) : ''}</td><td class="calculated">${nets[2] !== null ? m3 : ''}</td><td class="calculated">${nets[2] !== null ? nets[2].toFixed(5) : ''}</td><td class="calculated">${row.meanForceKn ? (row.meanForceKn).toFixed(4) : ''}</td><td class="calculated">${row.mean ? row.mean.toFixed(5) : ''}</td></tr>`;
+      return `<tr><td>${row.point}</td><td class="calculated">${nets[0] !== null ? m1 : ''}</td><td class="calculated">${nets[0] !== null ? nets[0].toFixed(7) : ''}</td><td class="calculated">${nets[1] !== null ? m2 : ''}</td><td class="calculated">${nets[1] !== null ? nets[1].toFixed(7) : ''}</td><td class="calculated">${nets[2] !== null ? m3 : ''}</td><td class="calculated">${nets[2] !== null ? nets[2].toFixed(7) : ''}</td><td class="calculated">${row.meanForceKn ? (row.meanForceKn).toFixed(4) : ''}</td><td class="calculated">${row.mean ? row.mean.toFixed(7) : ''}</td></tr>`;
     }).join('');
   }
 
@@ -1205,7 +1199,7 @@ class DMP41CalibrationApp {
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     body.innerHTML = activeRows.map((row) => {
       const targetKn = (row.target || 0) * targetConst; const interps = row.interpolatedValues || [null,null,null];
-      return `<tr><td class="calculated">${targetKn.toFixed(4)}</td><td class="calculated">${interps[0] !== null ? interps[0].toFixed(5) : ''}</td><td class="calculated">${interps[1] !== null ? interps[1].toFixed(5) : ''}</td><td class="calculated">${interps[2] !== null ? interps[2].toFixed(5) : ''}</td><td class="calculated">${row.meanInterpolated ? row.meanInterpolated.toFixed(5) : ''}</td></tr>`;
+      return `<tr><td class="calculated">${targetKn.toFixed(4)}</td><td class="calculated">${interps[0] !== null ? interps[0].toFixed(7) : ''}</td><td class="calculated">${interps[1] !== null ? interps[1].toFixed(7) : ''}</td><td class="calculated">${interps[2] !== null ? interps[2].toFixed(7) : ''}</td><td class="calculated">${row.meanInterpolated ? row.meanInterpolated.toFixed(7) : ''}</td></tr>`;
     }).join('');
   }
 
@@ -1278,7 +1272,7 @@ class DMP41CalibrationApp {
         }
       }
       
-      const fmt = (v) => v !== null ? v.toFixed(6) : "";
+      const fmt = (v) => v !== null ? v.toFixed(7) : "";
       const fmtExp = (v) => v !== null ? v.toFixed(3) : "";
       const fmtErr = (v) => v !== null ? v.toFixed(2) : "";
 
