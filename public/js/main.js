@@ -660,25 +660,77 @@ class DMP41CalibrationApp {
   }
 
   async startPolling() {
-    this.isPolling = true; document.getElementById('btn-start-polling').disabled = true; document.getElementById('btn-stop-polling').disabled = false;
+    this.isPolling = true; 
+    document.getElementById('btn-start-polling').disabled = true; 
+    document.getElementById('btn-stop-polling').disabled = false;
+    
     this.pollInterval = setInterval(async () => {
       try {
-        const res = await fetch('/api/hardware/read?channel=1&type=24'); const d = await res.json();
-        const def = d.raw_deflection || 0; this.currentReadings.push({ timestamp: new Date(), raw_mvv: def });
+        // 1. Fetch Precision Signal (Net mV/V) for calculations
+        const resNet = await fetch('/api/hardware/read?channel=1&type=24'); 
+        const dNet = await resNet.json();
+        const def = dNet.raw_deflection || 0; 
+        
+        // 2. Fetch Hardware Front Panel Display (Type 0 = Gross/Main Display)
+        const resHW = await fetch('/api/hardware/read?channel=1&type=0');
+        const dHW = await resHW.json();
+        const hwVal = dHW.raw_deflection || 0;
+        const hwUnit = dHW.unit || '- -';
+
+        this.currentReadings.push({ timestamp: new Date(), raw_mvv: def });
         if (this.currentReadings.length > 50) this.currentReadings.shift();
+        
+        // Update UI Precision mV/V
         document.getElementById('reading-mvv').textContent = def.toFixed(7);
-        const a = parseFloat(document.getElementById('t4-a')?.value || 1), b = parseFloat(document.getElementById('t4-b')?.value || 0), c = parseFloat(document.getElementById('t4-c')?.value || 0);
+        const mvvStatus = document.getElementById('reading-mvv-status');
+        if (mvvStatus) {
+          mvvStatus.textContent = dNet.status_desc || 'OK';
+          const okStates = ['OK', 'GROSS', 'NET', 'ABS'];
+          mvvStatus.style.background = okStates.includes(dNet.status_desc) ? '#e2e8f0' : '#fee2e2';
+          mvvStatus.style.color = okStates.includes(dNet.status_desc) ? '#475569' : '#b91c1c';
+        }
+        
+        // Update UI Hardware Display (Mirror of front panel)
+        document.getElementById('reading-hw').textContent = hwVal.toFixed(dHW.unit === 'mV/V' ? 7 : 3);
+        document.getElementById('reading-hw-unit').textContent = hwUnit;
+        const hwStatus = document.getElementById('reading-hw-status');
+        if (hwStatus) {
+          hwStatus.textContent = dHW.status_desc || 'OK';
+          const okStates = ['OK', 'GROSS', 'NET', 'ABS'];
+          hwStatus.style.background = okStates.includes(dHW.status_desc) ? '#dbeafe' : '#fee2e2';
+          hwStatus.style.color = okStates.includes(dHW.status_desc) ? '#1e40af' : '#b91c1c';
+          
+          // Visual highlight for the active mode
+          if (dHW.status_desc === 'ABS') hwStatus.style.background = '#fef3c7'; // Amber for ABS
+          if (dHW.status_desc === 'NET') hwStatus.style.background = '#dcfce7'; // Green for NET
+        }
+
+        // Force Calculation Logic
+        const a = parseFloat(document.getElementById('t4-a')?.value || 1);
+        const b = parseFloat(document.getElementById('t4-b')?.value || 0);
+        const c = parseFloat(document.getElementById('t4-c')?.value || 0);
+        
+        // Use the first reading of the first run as the software tare if available
         const zeroRef = (this.loggerData && this.loggerData.measured && this.loggerData.measured[0] && this.loggerData.measured[0].runs[0].r !== null) ? this.loggerData.measured[0].runs[0].r : 0;
         const netDef = def - zeroRef;
         const fKn = (a * netDef) + (b * Math.pow(netDef, 2)) + (c * Math.pow(netDef, 3));
         const val = fKn / (this.unitConstants[this.currentUnit] || 1);
         
-        console.log(`[Diagnostic] Force Calculation:\n - Raw mV/V reading: ${def.toFixed(7)}\n - Zero/Tare offset: ${zeroRef.toFixed(7)}\n - Net mV/V value: ${netDef.toFixed(7)}\n - Calibration Coefficients: a=${a}, b=${b}, c=${c}\n - Intermediate Force (kN): ${fKn.toFixed(7)}\n - Unit Scaling Factor (${this.currentUnit}): ${this.unitConstants[this.currentUnit]}\n - Final calculated force: ${val.toFixed(2)} ${this.currentUnit}`);
+        // DIAGNOSTIC LOGGING (Requirement #5)
+        console.log(`[DMP41 Diagnostic] -----------------------------------`);
+        console.log(`- Hardware RAW Response (Type 0): "${dHW.raw_response}"`);
+        console.log(`- Hardware RAW Response (Type 24): "${dNet.raw_response}"`);
+        console.log(`- DMP41 Display Value: ${hwVal} ${hwUnit}`);
+        console.log(`- App Raw reading: ${def.toFixed(7)} mV/V`);
+        console.log(`- App Software Tare: ${zeroRef.toFixed(7)} mV/V`);
+        console.log(`- Calculated Net Deflection: ${netDef.toFixed(7)} mV/V`);
+        console.log(`- Force Calculation: (${a} * ${netDef.toFixed(7)}) + (${b} * ${netDef.toFixed(7)}^2) + (${c} * ${netDef.toFixed(7)}^3) = ${fKn.toFixed(7)} kN`);
+        console.log(`- Final Display: ${val.toFixed(2)} ${this.currentUnit}`);
         
         if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = val.toFixed(2);   
         this.updateChart(def);
-      } catch (err) { console.error(err); }
-    }, 300);
+      } catch (err) { console.error('[Polling Error]', err); }
+    }, 400);
   }
 
   stopPolling() { this.isPolling = false; clearInterval(this.pollInterval); document.getElementById('btn-start-polling').disabled = false; document.getElementById('btn-stop-polling').disabled = true; document.getElementById('reading-mvv').textContent = '0.0000000'; if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = '0.00'; this.updateChart(0); }

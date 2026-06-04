@@ -301,20 +301,42 @@ class DMP41Interface {
     const response = await this.sendCommand(`MSV?${type}`);
     const parts = response.split(',');
     const val = parseFloat(parts[0]) || 0;
-    let extractedUnit = type == 24 ? 'mV/V' : '';
-    if (parts.length > 1 && isNaN(parseFloat(parts[1]))) extractedUnit = parts[1].trim();
+    let extractedUnit = '';
+    
+    // Improved unit extraction
+    if (parts.length > 1) {
+      const unitPart = parts[1].trim();
+      if (isNaN(parseFloat(unitPart))) {
+        extractedUnit = unitPart;
+      }
+    }
 
     if (type == 24) {
         this.readingBuffer.push(val);
         if (this.readingBuffer.length > this.bufferSize) this.readingBuffer.shift();
     }
 
-    return {
+    const statusCode = parts.length > 2 ? parts[2].trim() : '0';
+    let statusDesc = 'OK';
+    if (statusCode.includes('O')) statusDesc = 'OVERLOAD';
+    else if (statusCode.includes('U')) statusDesc = 'UNDERLOAD';
+    else if (statusCode.includes('E')) statusDesc = 'ERROR';
+    else if (statusCode.includes('A')) statusDesc = 'ABS';
+    else if (statusCode.includes('N')) statusDesc = 'NET';
+    else if (statusCode.includes('G')) statusDesc = 'GROSS';
+
+    const result = {
       raw_deflection: val,
       channel: parts.length > 2 ? parts[1] : '1',
-      status_code: parts.length > 2 ? parts[2] : '0',
-      unit: extractedUnit
+      status_code: statusCode,
+      status_desc: statusDesc,
+      unit: extractedUnit,
+      raw_response: response,
+      requested_type: type
     };
+
+    this._log(`READ RESULT: [Type ${type}] Value=${val.toFixed(7)} Unit=${extractedUnit} Status=${statusDesc}(${statusCode}) Raw="${response}"`, 'DIAG');
+    return result;
   }
 
   async tare() {
@@ -331,9 +353,11 @@ class DMP41Interface {
   
   generateDemoResponse(command) {
     if (command.startsWith('MSV?')) {
-      const noise = (Math.random() - 0.5) * 0.000010;
-      const baseValue = 0.078086 + noise;
-      return `${baseValue.toFixed(7)},mV/V,G,0`;
+      const noise = (Math.random() - 0.5) * 0.000002;
+      const baseValue = 0.0780862 + noise;
+      const type = command.replace('MSV?', '') || '0';
+      const unit = type === '24' ? 'mV/V' : 'kgf';
+      return `${baseValue.toFixed(7)},${unit},G,0`;
     }
     if (command === 'TAR') return '0';
     if (command === 'RAR?') return '1';

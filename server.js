@@ -431,15 +431,13 @@ app.post('/api/hardware/config', async (req, res) => {
 app.get('/api/hardware/read', async (req, res) => {
   try {
     if (!dmp41.isConnected) {
-      return res.json({ raw_deflection: 0, unit: 'mV/V', tare_mode: 'ERR', status_code: '0' });
+      return res.json({ raw_deflection: 0, unit: 'mV/V', tare_mode: 'ERR', status_code: '0', raw_response: 'NOT_CONNECTED' });
     }
     const { channel = 1, type = 24 } = req.query;
     const reading = await dmp41.readMeasurementValue(parseInt(type));
     res.json(reading);
   } catch (err) {
-    // If not connected, gracefully return 0 instead of throwing an error 
-    // so the live monitor graph goes to 0 as requested by the user.
-    res.json({ raw_deflection: 0, unit: 'mV/V', tare_mode: 'ERR', status_code: '0' });
+    res.json({ raw_deflection: 0, unit: 'mV/V', tare_mode: 'ERR', status_code: '0', error: err.message });
   }
 });
 

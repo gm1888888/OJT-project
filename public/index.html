@@ -162,20 +162,40 @@
             <div class="reading-display" style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 40px; margin: 0; flex-grow: 1;">
               
               <!-- Primary: mV/V -->
-              <div style="display: flex; align-items: baseline;">
-                <div class="value" id="reading-mvv">0.0000000</div>
-                <div class="unit">mV/V</div>
+              <div style="display: flex; flex-direction: column; align-items: center;">
+                <div style="display: flex; align-items: baseline;">
+                  <div class="value" id="reading-mvv">0.0000000</div>
+                  <div class="unit">mV/V</div>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
+                  <span style="font-size: 0.8em; color: #666;">Precision Signal</span>
+                  <span id="reading-mvv-status" style="font-size: 0.7em; background: #e2e8f0; padding: 2px 5px; border-radius: 3px; color: #475569;">OK</span>
+                </div>
               </div>
 
-              <div style="width: 1px; height: 50px; background-color: #ccc;"></div>
+              <div style="width: 1px; height: 60px; background-color: #ddd;"></div>
 
-              <!-- Secondary: Calculated kgf -->
+              <!-- Hardware Display (Mirror of front panel) -->
               <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center;">
                 <div style="display: flex; align-items: baseline; gap: 5px;">
-                  <span id="reading-kgf" style="font-weight: bold; color: #000; font-size: 2em;">0.000</span>
-                  <span id="reading-unit" style="color: #000; font-size: 1.2em;">kgf</span>
+                  <span id="reading-hw" style="font-weight: bold; color: #2563eb; font-size: 1.8em;">0.000</span>
+                  <span id="reading-hw-unit" style="color: #2563eb; font-size: 1.1em;">- -</span>
                 </div>
-                <span style="font-size: 0.9em; color: #000;">Calculated Force</span>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <span style="font-size: 0.8em; color: #666;">DMP41 Front Panel</span>
+                  <span id="reading-hw-status" style="font-size: 0.7em; background: #dbeafe; padding: 2px 5px; border-radius: 3px; color: #1e40af;">OK</span>
+                </div>
+              </div>
+
+              <div style="width: 1px; height: 60px; background-color: #ddd;"></div>
+
+              <!-- Secondary: Calculated Force -->
+              <div style="display: flex; flex-direction: column; align-items: flex-start; justify-content: center;">
+                <div style="display: flex; align-items: baseline; gap: 5px;">
+                  <span id="reading-kgf" style="font-weight: bold; color: #059669; font-size: 2em;">0.00</span>
+                  <span id="reading-unit" style="color: #059669; font-size: 1.2em;">kgf</span>
+                </div>
+                <span style="font-size: 0.8em; color: #666;">Calculated Load (Software)</span>
               </div>
 
             </div>
