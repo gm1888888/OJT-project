@@ -318,24 +318,28 @@ class DMP41Interface {
 
     const statusCode = parts.length > 2 ? parts[2].trim() : '0';
     let statusDesc = 'OK';
+    
+    // DMP41 status word parsing (Handles both character codes and basic overflow)
     if (statusCode.includes('O')) statusDesc = 'OVERLOAD';
     else if (statusCode.includes('U')) statusDesc = 'UNDERLOAD';
     else if (statusCode.includes('E')) statusDesc = 'ERROR';
     else if (statusCode.includes('A')) statusDesc = 'ABS';
     else if (statusCode.includes('N')) statusDesc = 'NET';
     else if (statusCode.includes('G')) statusDesc = 'GROSS';
+    else if (statusCode === '0') statusDesc = 'OK';
 
     const result = {
       raw_deflection: val,
-      channel: parts.length > 2 ? parts[1] : '1',
+      channel: this.currentChannel,
       status_code: statusCode,
       status_desc: statusDesc,
       unit: extractedUnit,
       raw_response: response,
-      requested_type: type
+      requested_type: type,
+      timestamp: new Date().toISOString()
     };
 
-    this._log(`READ RESULT: [Type ${type}] Value=${val.toFixed(7)} Unit=${extractedUnit} Status=${statusDesc}(${statusCode}) Raw="${response}"`, 'DIAG');
+    this._log(`DIAG: [Type ${type}] Val=${val.toFixed(7)} Unit=${extractedUnit} Mode=${statusDesc}(${statusCode}) Raw="${response}"`, 'DATA');
     return result;
   }
 

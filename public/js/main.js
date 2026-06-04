@@ -666,66 +666,59 @@ class DMP41CalibrationApp {
     
     this.pollInterval = setInterval(async () => {
       try {
-        // 1. Fetch Precision Signal (Net mV/V) for calculations
+        // 1. Fetch Precision Signal (mV/V) with status word
         const resNet = await fetch('/api/hardware/read?channel=1&type=24'); 
         const dNet = await resNet.json();
         const def = dNet.raw_deflection || 0; 
-        
-        // 2. Fetch Hardware Front Panel Display (Type 0 = Gross/Main Display)
-        const resHW = await fetch('/api/hardware/read?channel=1&type=0');
-        const dHW = await resHW.json();
-        const hwVal = dHW.raw_deflection || 0;
-        const hwUnit = dHW.unit || '- -';
+        const mode = dNet.status_desc || 'OK';
 
         this.currentReadings.push({ timestamp: new Date(), raw_mvv: def });
         if (this.currentReadings.length > 50) this.currentReadings.shift();
         
-        // Update UI Precision mV/V
+        // Update UI Precision mV/V (Requirement #8, #10, #12)
         document.getElementById('reading-mvv').textContent = def.toFixed(7);
+        const mvvLabel = document.getElementById('reading-mvv-label');
+        if (mvvLabel) mvvLabel.textContent = `mV/V (${mode})`;
+        
         const mvvStatus = document.getElementById('reading-mvv-status');
         if (mvvStatus) {
-          mvvStatus.textContent = dNet.status_desc || 'OK';
+          mvvStatus.textContent = mode;
           const okStates = ['OK', 'GROSS', 'NET', 'ABS'];
-          mvvStatus.style.background = okStates.includes(dNet.status_desc) ? '#e2e8f0' : '#fee2e2';
-          mvvStatus.style.color = okStates.includes(dNet.status_desc) ? '#475569' : '#b91c1c';
-        }
-        
-        // Update UI Hardware Display (Mirror of front panel)
-        document.getElementById('reading-hw').textContent = hwVal.toFixed(dHW.unit === 'mV/V' ? 7 : 3);
-        document.getElementById('reading-hw-unit').textContent = hwUnit;
-        const hwStatus = document.getElementById('reading-hw-status');
-        if (hwStatus) {
-          hwStatus.textContent = dHW.status_desc || 'OK';
-          const okStates = ['OK', 'GROSS', 'NET', 'ABS'];
-          hwStatus.style.background = okStates.includes(dHW.status_desc) ? '#dbeafe' : '#fee2e2';
-          hwStatus.style.color = okStates.includes(dHW.status_desc) ? '#1e40af' : '#b91c1c';
+          mvvStatus.style.background = okStates.includes(mode) ? '#e2e8f0' : '#fee2e2';
+          mvvStatus.style.color = okStates.includes(mode) ? '#475569' : '#b91c1c';
           
           // Visual highlight for the active mode
-          if (dHW.status_desc === 'ABS') hwStatus.style.background = '#fef3c7'; // Amber for ABS
-          if (dHW.status_desc === 'NET') hwStatus.style.background = '#dcfce7'; // Green for NET
+          if (mode === 'ABS') mvvStatus.style.background = '#fef3c7'; // Amber for ABS
+          if (mode === 'NET') mvvStatus.style.background = '#dcfce7'; // Green for NET
         }
 
-        // Force Calculation Logic
+        // Force Calculation Logic (Requirement #1, #2, #3, #13)
         const a = parseFloat(document.getElementById('t4-a')?.value || 1);
         const b = parseFloat(document.getElementById('t4-b')?.value || 0);
         const c = parseFloat(document.getElementById('t4-c')?.value || 0);
+        const cap = document.getElementById('t4-cap')?.value || 'N/A';
         
-        // Use the first reading of the first run as the software tare if available
-        const zeroRef = (this.loggerData && this.loggerData.measured && this.loggerData.measured[0] && this.loggerData.measured[0].runs[0].r !== null) ? this.loggerData.measured[0].runs[0].r : 0;
-        const netDef = def - zeroRef;
+        // Software Zero Reference (from first test point)
+        const softwareZero = (this.loggerData && this.loggerData.measured && this.loggerData.measured[0] && this.loggerData.measured[0].runs[0].r !== null) ? this.loggerData.measured[0].runs[0].r : 0;
+        
+        // Avoid double taring (Requirement #13)
+        // If DMP41 is in NET mode, it means it's already providing a tared value.
+        const netDef = (mode === 'NET') ? def : (def - softwareZero);
+        
         const fKn = (a * netDef) + (b * Math.pow(netDef, 2)) + (c * Math.pow(netDef, 3));
         const val = fKn / (this.unitConstants[this.currentUnit] || 1);
         
-        // DIAGNOSTIC LOGGING (Requirement #5)
-        console.log(`[DMP41 Diagnostic] -----------------------------------`);
-        console.log(`- Hardware RAW Response (Type 0): "${dHW.raw_response}"`);
-        console.log(`- Hardware RAW Response (Type 24): "${dNet.raw_response}"`);
-        console.log(`- DMP41 Display Value: ${hwVal} ${hwUnit}`);
-        console.log(`- App Raw reading: ${def.toFixed(7)} mV/V`);
-        console.log(`- App Software Tare: ${zeroRef.toFixed(7)} mV/V`);
-        console.log(`- Calculated Net Deflection: ${netDef.toFixed(7)} mV/V`);
-        console.log(`- Force Calculation: (${a} * ${netDef.toFixed(7)}) + (${b} * ${netDef.toFixed(7)}^2) + (${c} * ${netDef.toFixed(7)}^3) = ${fKn.toFixed(7)} kN`);
-        console.log(`- Final Display: ${val.toFixed(2)} ${this.currentUnit}`);
+        // DIAGNOSTIC LOGGING (Requirement #5, #16)
+        console.log(`[DMP41 Force Audit] -----------------------------------`);
+        console.log(`- Active Mode: ${mode} (Raw Status: ${dNet.status_code})`);
+        console.log(`- Raw mV/V (def): ${def.toFixed(7)}`);
+        console.log(`- Software Zero Ref: ${softwareZero.toFixed(7)}`);
+        console.log(`- Net Deflection used: ${netDef.toFixed(7)}`);
+        console.log(`- Calibration Data: A=${a}, B=${b}, C=${c}, Capacity=${cap}`);
+        console.log(`- Intermediate Force (kN): ${fKn.toFixed(7)}`);
+        console.log(`- Target Unit: ${this.currentUnit} (Scale: ${this.unitConstants[this.currentUnit]})`);
+        console.log(`- Final Calculated Load: ${val.toFixed(2)} ${this.currentUnit}`);
+        console.log(`- Raw Response: "${dNet.raw_response}"`);
         
         if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = val.toFixed(2);   
         this.updateChart(def);
@@ -733,7 +726,16 @@ class DMP41CalibrationApp {
     }, 400);
   }
 
-  stopPolling() { this.isPolling = false; clearInterval(this.pollInterval); document.getElementById('btn-start-polling').disabled = false; document.getElementById('btn-stop-polling').disabled = true; document.getElementById('reading-mvv').textContent = '0.0000000'; if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = '0.00'; this.updateChart(0); }
+  stopPolling() { 
+    this.isPolling = false; 
+    clearInterval(this.pollInterval); 
+    document.getElementById('btn-start-polling').disabled = false; 
+    document.getElementById('btn-stop-polling').disabled = true; 
+    document.getElementById('reading-mvv').textContent = '0.0000000'; 
+    if (document.getElementById('reading-mvv-label')) document.getElementById('reading-mvv-label').textContent = 'mV/V';
+    if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = '0.00'; 
+    this.updateChart(0); 
+  }
 
   async createProject() {
     const d = document.getElementById('np-date').value, m = document.getElementById('np-mode').value, n = document.getElementById('np-name').value, c = document.getElementById('np-capacity').value, i = document.getElementById('np-item').value, r = document.getElementById('np-range').value, lm = document.getElementById('np-lc-make')?.value || '', ls = document.getElementById('np-lc-sn')?.value || '', im = document.getElementById('np-ind-make')?.value || '', is = document.getElementById('np-ind-sn')?.value || '', inc = document.getElementById('np-increment').value, res = document.getElementById('np-resolution').value;
