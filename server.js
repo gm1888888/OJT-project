@@ -431,7 +431,7 @@ app.post('/api/hardware/config', async (req, res) => {
 app.get('/api/hardware/read', async (req, res) => {
   try {
     if (!dmp41.isConnected) {
-      return res.json({ raw_deflection: 0, unit: 'mV/V', tare_mode: 'ERR', status_code: '0', raw_response: 'NOT_CONNECTED' });
+      return res.json({ raw_deflection: 0, unit: 'mV/V', status_code: '0', raw_response: 'NOT_CONNECTED' });
     }
     const { channel = 1, type = 24 } = req.query;
     const reading = await dmp41.readMeasurementValue(parseInt(type));

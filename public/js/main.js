@@ -666,33 +666,25 @@ class DMP41CalibrationApp {
     
     this.pollInterval = setInterval(async () => {
       try {
-        // 1. Fetch Precision Signal (mV/V) with status word
+        // 1. Fetch Precision Signal (mV/V)
         const resNet = await fetch('/api/hardware/read?channel=1&type=24'); 
         const dNet = await resNet.json();
         const def = dNet.raw_deflection || 0; 
-        const mode = dNet.status_desc || 'OK';
 
         this.currentReadings.push({ timestamp: new Date(), raw_mvv: def });
         if (this.currentReadings.length > 50) this.currentReadings.shift();
         
-        // Update UI Precision mV/V (Requirement #8, #10, #12)
+        // Update UI Precision mV/V (Requirement #5, #7)
         document.getElementById('reading-mvv').textContent = def.toFixed(7);
-        const mvvLabel = document.getElementById('reading-mvv-label');
-        if (mvvLabel) mvvLabel.textContent = `mV/V (${mode})`;
         
         const mvvStatus = document.getElementById('reading-mvv-status');
         if (mvvStatus) {
-          mvvStatus.textContent = mode;
-          const okStates = ['OK', 'GROSS', 'NET', 'ABS'];
-          mvvStatus.style.background = okStates.includes(mode) ? '#e2e8f0' : '#fee2e2';
-          mvvStatus.style.color = okStates.includes(mode) ? '#475569' : '#b91c1c';
-          
-          // Visual highlight for the active mode
-          if (mode === 'ABS') mvvStatus.style.background = '#fef3c7'; // Amber for ABS
-          if (mode === 'NET') mvvStatus.style.background = '#dcfce7'; // Green for NET
+          mvvStatus.textContent = 'OK';
+          mvvStatus.style.background = '#e2e8f0';
+          mvvStatus.style.color = '#475569';
         }
 
-        // Force Calculation Logic (Requirement #1, #2, #3, #13)
+        // Force Calculation Logic (Requirement #4, #5, #7)
         const a = parseFloat(document.getElementById('t4-a')?.value || 1);
         const b = parseFloat(document.getElementById('t4-b')?.value || 0);
         const c = parseFloat(document.getElementById('t4-c')?.value || 0);
@@ -701,24 +693,20 @@ class DMP41CalibrationApp {
         // Software Zero Reference (from first test point)
         const softwareZero = (this.loggerData && this.loggerData.measured && this.loggerData.measured[0] && this.loggerData.measured[0].runs[0].r !== null) ? this.loggerData.measured[0].runs[0].r : 0;
         
-        // Avoid double taring (Requirement #13)
-        // If DMP41 is in NET mode, it means it's already providing a tared value.
-        const netDef = (mode === 'NET') ? def : (def - softwareZero);
+        // Use measurement value directly (Requirement #5)
+        const netDef = def - softwareZero;
         
         const fKn = (a * netDef) + (b * Math.pow(netDef, 2)) + (c * Math.pow(netDef, 3));
         const val = fKn / (this.unitConstants[this.currentUnit] || 1);
         
-        // DIAGNOSTIC LOGGING (Requirement #5, #16)
-        console.log(`[DMP41 Force Audit] -----------------------------------`);
-        console.log(`- Active Mode: ${mode} (Raw Status: ${dNet.status_code})`);
+        // DIAGNOSTIC LOGGING (Requirement #6)
+        console.log(`[Force Calculation Audit] -----------------------------`);
         console.log(`- Raw mV/V (def): ${def.toFixed(7)}`);
         console.log(`- Software Zero Ref: ${softwareZero.toFixed(7)}`);
-        console.log(`- Net Deflection used: ${netDef.toFixed(7)}`);
-        console.log(`- Calibration Data: A=${a}, B=${b}, C=${c}, Capacity=${cap}`);
-        console.log(`- Intermediate Force (kN): ${fKn.toFixed(7)}`);
-        console.log(`- Target Unit: ${this.currentUnit} (Scale: ${this.unitConstants[this.currentUnit]})`);
-        console.log(`- Final Calculated Load: ${val.toFixed(2)} ${this.currentUnit}`);
-        console.log(`- Raw Response: "${dNet.raw_response}"`);
+        console.log(`- Net Deflection: ${netDef.toFixed(7)}`);
+        console.log(`- Calibration: A=${a}, B=${b}, C=${c}, Cap=${cap}`);
+        console.log(`- Force (kN): ${fKn.toFixed(7)}`);
+        console.log(`- Final Load: ${val.toFixed(2)} ${this.currentUnit}`);
         
         if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = val.toFixed(2);   
         this.updateChart(def);
@@ -732,7 +720,6 @@ class DMP41CalibrationApp {
     document.getElementById('btn-start-polling').disabled = false; 
     document.getElementById('btn-stop-polling').disabled = true; 
     document.getElementById('reading-mvv').textContent = '0.0000000'; 
-    if (document.getElementById('reading-mvv-label')) document.getElementById('reading-mvv-label').textContent = 'mV/V';
     if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = '0.00'; 
     this.updateChart(0); 
   }
