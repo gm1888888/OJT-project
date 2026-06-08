@@ -675,7 +675,7 @@ class DMP41CalibrationApp {
         if (this.currentReadings.length > 50) this.currentReadings.shift();
         
         // Update UI Precision mV/V (Requirement #5, #7)
-        document.getElementById('reading-mvv').textContent = def.toFixed(7);
+        document.getElementById('reading-mvv').textContent = def.toFixed(6);
         
         const mvvStatus = document.getElementById('reading-mvv-status');
         if (mvvStatus) {
@@ -708,7 +708,6 @@ class DMP41CalibrationApp {
         console.log(`- Force (kN): ${fKn.toFixed(7)}`);
         console.log(`- Final Load: ${val.toFixed(2)} ${this.currentUnit}`);
         
-        if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = val.toFixed(2);   
         this.updateChart(def);
       } catch (err) { console.error('[Polling Error]', err); }
     }, 400);
@@ -719,8 +718,7 @@ class DMP41CalibrationApp {
     clearInterval(this.pollInterval); 
     document.getElementById('btn-start-polling').disabled = false; 
     document.getElementById('btn-stop-polling').disabled = true; 
-    document.getElementById('reading-mvv').textContent = '0.0000000'; 
-    if (document.getElementById('reading-kgf')) document.getElementById('reading-kgf').textContent = '0.00'; 
+    document.getElementById('reading-mvv').textContent = '0.000000'; 
     this.updateChart(0); 
   }
 
@@ -951,7 +949,7 @@ class DMP41CalibrationApp {
         });
         document.getElementById('modal-history-view').style.display = 'none';
         this.renderLogger();
-        alert("Historical data loaded as demo.");
+        alert("Historical data loaded.");
     };
     fetchMetadata();
   }

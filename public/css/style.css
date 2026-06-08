@@ -209,14 +209,6 @@ label {
   margin-left: 8px;
 }
 
-#reading-kgf {
-  color: #f8fafc !important;
-}
-
-#reading-unit, .reading-display span[style*="color: #000"] {
-  color: #94a3b8 !important;
-}
-
 .chart-container {
   margin-top: 20px;
   height: 250px;
@@ -597,10 +589,6 @@ tbody tr:nth-child(even) {
 
 #live-monitor.mini-window .reading-display .value {
   font-size: 2rem !important;
-}
-
-#live-monitor.mini-window #reading-kgf {
-  font-size: 1.5rem !important;
 }
 
 #live-monitor.mini-window .reading-display > div:nth-child(2) {
