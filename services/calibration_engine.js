@@ -43,7 +43,8 @@ class CalibrationEngine {
     }
 
     // Standard uncertainties (absolute in kN)
-    const u_rep = repeatability_kn / Math.sqrt(num_runs);
+    // Legacy mapping: Type B rectangular distribution using relative range b_i (params.rep_b_percent)
+    const u_rep = params.rep_b_percent !== undefined ? (params.rep_b_percent / 100 * abs_ref) / Math.sqrt(12) : (repeatability_kn / Math.sqrt(num_runs));
     const u_res = resolution_kn / (2 * Math.sqrt(3)); 
     const u_tare = tare_uncertainty_kn;
     const u_cal = (cal_uncertainty_percent / 100) * abs_ref;
@@ -144,12 +145,29 @@ class CalibrationEngine {
       }
     }
 
-    // Uncertainty
+    // Error analysis
+    const targetForceKn = targetForceKgf * unit_scale;
     const abs_mean_kn = Math.abs(mean_kn) || 1e-9;
+    
+    // Authoritative Guard: Avoid division by zero for error percentages
+    let accu_q = 0;
+    let rep_b = 0;
+    
+    if (abs_mean_kn > 1e-9) {
+        // Relative accuracy error qi (%) = (Target - Reference) / Reference * 100
+        accu_q = ((targetForceKn - mean_kn) / abs_mean_kn) * 100;
+
+        // Relative repeatability error b (%) = (Max - Min) / Mean * 100
+        const range = activeForces.length > 1 ? Math.max(...activeForces) - Math.min(...activeForces) : 0;
+        rep_b = (range / abs_mean_kn) * 100;
+    }
+
+    // Uncertainty
     const res_kn = (parseFloat(params.resolution_kgf) || 0.01) * unit_scale;
 
     const uncertaintyParams = {
       repeatability_kn: s_dev_kn,
+      rep_b_percent: rep_b,
       resolution_kn: res_kn, 
       tare_uncertainty_kn: 1e-7,
       cal_uncertainty_percent: calUncertainty_percent,
@@ -164,22 +182,6 @@ class CalibrationEngine {
 
     // Classification
     const classification = this.classifyMeasurement(uncertainty.relative_uncertainty_percent);
-
-    // Error analysis
-    const targetForceKn = targetForceKgf * unit_scale;
-    
-    // Authoritative Guard: Avoid division by zero for error percentages
-    let accu_q = 0;
-    let rep_b = 0;
-    
-    if (abs_mean_kn > 1e-9) {
-        // Relative accuracy error qi (%) = (Target - Reference) / Reference * 100
-        accu_q = ((targetForceKn - mean_kn) / abs_mean_kn) * 100;
-
-        // Relative repeatability error b (%) = (Max - Min) / Mean * 100
-        const range = activeForces.length > 1 ? Math.max(...activeForces) - Math.min(...activeForces) : 0;
-        rep_b = (range / abs_mean_kn) * 100;
-    }
 
     // Relative zero error f0 (%) = (Residual Indication / Max Capacity) * 100
     let f0 = 0;
