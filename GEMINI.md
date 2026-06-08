@@ -77,3 +77,5 @@ The project includes a robust `Start_System.bat` file designed for a "one-click"
 - [x] **Startup Diagnostics**: Added automatic surfacing of `node.log` on startup failure.
 - [x] **Input Sanitization**: Enhanced validation for polynomial coefficients in the modal.
 - [x] **CSS Refinement**: Polished grid layout for the "Manage Standard" modal.
+- [x] **Workspace Cleanup**: Automated removal of transient logs, temporary development scripts, and generated reports to maintain a clean production environment.
+- [x] **UI Simplification**: Streamlined the Live Monitor by removing redundant calculated force displays and standardizing mV/V precision to 6 decimal places for industrial consistency.
