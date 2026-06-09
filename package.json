@@ -10,14 +10,12 @@
     "autosync": "nodemon --ext js,html,css,json --watch public --watch services --watch server.js --exec \"node autosync.js\""
   },
   "dependencies": {
-    "axios": "^1.16.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^16.3.1",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
-    "node-gyp-build": "^4.8.4",
-    "socket.io": "^4.5.4"
+    "node-gyp-build": "^4.8.4"
   },
   "devDependencies": {
     "jest": "^29.0.0",

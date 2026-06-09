@@ -329,7 +329,7 @@
         <div class="controls" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px; background: #eee; padding: 15px; border-radius: 8px;">
           <button id="btn-save-history" style="background-color: #28a745; color: white;">Update Current Project</button>
           <button id="btn-save-as" style="background-color: #007bff; color: white;">Save As New Project</button>
-          <button id="btn-excel-export">Export</button>
+          <button id="btn-excel-export">Print</button>
           <button id="btn-excel-clear">Reset All Worksheet Data</button>
         </div>
         </section>
@@ -343,8 +343,11 @@
         <span class="close" id="close-history-list">&times;</span>
       </div>
       <div class="modal-body">
-        <div style="margin-bottom: 15px;">
-          <input type="text" id="history-search" placeholder="Search by Project Name, S/N, or Date..." style="padding: 10px; width: 100%; border: 1px solid #ddd; border-radius: 8px;">
+        <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+          <input type="text" id="history-search" placeholder="Search by Project Name, S/N, or Date..." style="padding: 10px; flex: 1; border: 1px solid #ddd; border-radius: 8px;">
+          <input type="file" id="import-project-file" style="display: none;" accept=".json">
+          <button id="btn-import-project" style="background: #17a2b8; color: white;">Import Project</button>
+          <button id="btn-export-all-projects" style="background: #8b5cf6; color: white;">Export All Projects</button>
         </div>
         <div id="history-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
           <p>No history found. Complete a calibration and click 'Save to History'.</p>
@@ -361,8 +364,9 @@
         <span class="close" id="close-archive-list">&times;</span>
       </div>
       <div class="modal-body">
-        <div style="margin-bottom: 15px;">
-          <input type="text" id="archive-search" placeholder="Search by Project Name, S/N, or Date..." style="padding: 10px; width: 100%; border: 1px solid #ddd; border-radius: 8px;">
+        <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+          <input type="text" id="archive-search" placeholder="Search by Project Name, S/N, or Date..." style="padding: 10px; flex: 1; border: 1px solid #ddd; border-radius: 8px;">
+          <button id="btn-export-all-archives" style="background: #8b5cf6; color: white;">Export All Projects</button>
         </div>
         <div id="archive-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
           <p>No archived data found.</p>
@@ -532,9 +536,10 @@
       </div>
 
       <div class="modal-footer">
-        <div style="flex-grow: 1; text-align: left;">
+        <div style="flex-grow: 1; text-align: left; display: flex; gap: 10px;">
           <button id="btn-hist-archive" style="background: #f59e0b;">Archive Record</button>
           <button id="btn-hist-unarchive" style="background: #10b981; display: none;">Restore from Archive</button>
+          <button id="btn-hist-export-project" style="background: #17a2b8;">Export Project</button>
         </div>
         <button id="btn-hist-load-demo" style="background: #6366f1;">Load</button>
         <button id="btn-hist-excel" style="background: #10b981;">Export Excel</button>
@@ -631,6 +636,49 @@
       <div class="modal-footer">
         <button id="btn-me-add-row" style="background: var(--primary-color); color: white;">+ Add Row</button>
         <button id="btn-me-save">Save Data Points</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Summary Modal -->
+  <div id="modal-import-summary" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>Import Package Detected</h2>
+        <span class="close" id="close-import-summary">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div id="import-setup-view">
+          <p style="font-size: 1.1em; font-weight: bold; margin-bottom: 10px;">Projects Found: <span id="import-total-count">0</span></p>
+          <div style="max-height: 150px; overflow-y: auto; background: #f9f9f9; padding: 10px; border: 1px solid #ddd; margin-bottom: 15px; font-family: monospace;" id="import-project-list">
+            <!-- Project names go here -->
+          </div>
+          <div class="form-group">
+            <label>Duplicate Handling Strategy:</label>
+            <select id="import-duplicate-strategy">
+              <option value="copy">Import as Copy (Default)</option>
+              <option value="skip">Skip Existing</option>
+              <option value="replace">Replace Existing</option>
+            </select>
+          </div>
+        </div>
+        
+        <div id="import-progress-view" style="display: none;">
+          <p style="font-weight: bold; color: #001D53;" id="import-progress-text">Importing Project 1 of X...</p>
+          <div style="width: 100%; background-color: #ddd; height: 15px; border-radius: 5px; overflow: hidden; margin-bottom: 15px;">
+            <div id="import-progress-bar" style="width: 0%; height: 100%; background-color: #4CAF50; transition: width 0.2s;"></div>
+          </div>
+          <div style="font-family: monospace; font-size: 0.9em; background: #f1f5f9; padding: 10px; border-radius: 4px;">
+            <div style="color: #10b981;">Imported: <span id="import-success-count">0</span></div>
+            <div style="color: #f59e0b;">Skipped: <span id="import-skip-count">0</span></div>
+            <div style="color: #ef4444;">Failed: <span id="import-fail-count">0</span></div>
+          </div>
+          <div id="import-error-log" style="margin-top: 10px; max-height: 100px; overflow-y: auto; color: #ef4444; font-size: 0.85em; white-space: pre-wrap;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-import-proceed" style="background: #10b981;">Proceed</button>
+        <button id="btn-import-close" style="background: #64748b; display: none;">Close</button>
       </div>
     </div>
   </div>

@@ -280,6 +280,40 @@ class DMP41CalibrationApp {
       if (!this.currentHistoricalData || !this.currentHistoricalData.id) return;
       window.open(`/api/export/pdf/${this.currentHistoricalData.id}`, '_blank');
     };
+    
+    const btnHistExportProject = document.getElementById('btn-hist-export-project');
+    if (btnHistExportProject) btnHistExportProject.onclick = () => {
+      if (!this.currentHistoricalData || !this.currentHistoricalData.id) return;
+      window.open(`/api/export/project/${this.currentHistoricalData.id}`, '_blank');
+    };
+
+    const btnExportAllProjects = document.getElementById('btn-export-all-projects');
+    if (btnExportAllProjects) {
+      btnExportAllProjects.onclick = () => window.open('/api/export/projects/all?archived=false', '_blank');
+    }
+
+    const btnExportAllArchives = document.getElementById('btn-export-all-archives');
+    if (btnExportAllArchives) {
+      btnExportAllArchives.onclick = () => window.open('/api/export/projects/all?archived=true', '_blank');
+    }
+
+    const btnImportProject = document.getElementById('btn-import-project');
+    const fileImportProject = document.getElementById('import-project-file');
+    if (btnImportProject && fileImportProject) {
+      btnImportProject.onclick = () => fileImportProject.click();
+      fileImportProject.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const json = JSON.parse(text);
+          this.handleImportPackage(json);
+        } catch (err) {
+          alert('Failed to parse or import project file: ' + err.message);
+        }
+        fileImportProject.value = ''; // Reset
+      };
+    }
 
     document.getElementById('btn-excel-capture').addEventListener('click', () => this.captureToSelectedCell());
     document.getElementById('btn-excel-clear').addEventListener('click', () => this.clearLoggerData());
@@ -320,6 +354,107 @@ class DMP41CalibrationApp {
         if (!monitor.classList.contains('mini-window')) { placeholder.style.height = `${origHeight}px`; placeholder.style.marginBottom = placeholder.dataset.origMargin; monitor.classList.add('mini-window'); }
       } else if (monitor.classList.contains('mini-window')) { monitor.classList.remove('mini-window'); placeholder.style.height = '0px'; placeholder.style.marginBottom = '0px'; }
     });
+  }
+
+  handleImportPackage(json) {
+    let projects = [];
+    if (json.type === 'DMP41_PROJECT_EXPORT' && json.project) {
+      projects.push(json);
+    } else if (json.type === 'DMP41_BULK_EXPORT' && Array.isArray(json.projects)) {
+      projects = json.projects;
+    } else {
+      alert("Invalid package format.");
+      return;
+    }
+
+    if (projects.length === 0) {
+      alert("No projects found in package.");
+      return;
+    }
+
+    const modal = document.getElementById('modal-import-summary');
+    if (!modal) return;
+
+    document.getElementById('import-setup-view').style.display = 'block';
+    document.getElementById('import-progress-view').style.display = 'none';
+    document.getElementById('btn-import-proceed').style.display = 'inline-block';
+    document.getElementById('btn-import-close').style.display = 'none';
+
+    document.getElementById('import-total-count').textContent = projects.length;
+    const listHtml = projects.map(p => {
+      const name = p.project?.project_name || 'Unknown Project';
+      const sn = p.project?.serial_number || 'N/A';
+      return `<div><strong>${name}</strong> <span style="color:#666;">(S/N: ${sn})</span></div>`;
+    }).join('');
+    document.getElementById('import-project-list').innerHTML = listHtml;
+
+    modal.style.display = 'flex';
+
+    document.getElementById('btn-import-proceed').onclick = () => {
+      const strat = document.getElementById('import-duplicate-strategy').value;
+      this.runImportSequence(projects, strat);
+    };
+    document.getElementById('btn-import-close').onclick = () => {
+      modal.style.display = 'none';
+      this.loadHistory();
+    };
+  }
+
+  async runImportSequence(projects, strategy) {
+    document.getElementById('import-setup-view').style.display = 'none';
+    document.getElementById('import-progress-view').style.display = 'block';
+    document.getElementById('btn-import-proceed').style.display = 'none';
+    
+    let success = 0, skipped = 0, failed = 0;
+    const bar = document.getElementById('import-progress-bar');
+    const txt = document.getElementById('import-progress-text');
+    const log = document.getElementById('import-error-log');
+    
+    document.getElementById('import-success-count').textContent = '0';
+    document.getElementById('import-skip-count').textContent = '0';
+    document.getElementById('import-fail-count').textContent = '0';
+    log.innerHTML = '';
+
+    for (let i = 0; i < projects.length; i++) {
+      txt.textContent = `Importing Project ${i + 1} of ${projects.length}...`;
+      bar.style.width = `${Math.round(((i) / projects.length) * 100)}%`;
+      
+      const payload = projects[i];
+      payload.type = 'DMP41_PROJECT_EXPORT';
+      payload.duplicate_strategy = strategy;
+
+      try {
+        const res = await fetch('/api/import/project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        
+        if (res.ok) {
+          if (result.status === 'skipped') {
+            skipped++;
+            log.innerHTML += `<div>Skipped: ${payload.project?.project_name} (Already exists)</div>`;
+          } else {
+            success++;
+          }
+        } else {
+          failed++;
+          log.innerHTML += `<div>Failed: ${payload.project?.project_name} - ${result.error}</div>`;
+        }
+      } catch (err) {
+        failed++;
+        log.innerHTML += `<div>Failed: ${payload.project?.project_name} - Network/Parse Error</div>`;
+      }
+
+      document.getElementById('import-success-count').textContent = success;
+      document.getElementById('import-skip-count').textContent = skipped;
+      document.getElementById('import-fail-count').textContent = failed;
+    }
+
+    bar.style.width = `100%`;
+    txt.textContent = "Import Completed";
+    document.getElementById('btn-import-close').style.display = 'inline-block';
   }
 
   // --- Standard Management ---
@@ -699,14 +834,7 @@ class DMP41CalibrationApp {
         const fKn = (a * netDef) + (b * Math.pow(netDef, 2)) + (c * Math.pow(netDef, 3));
         const val = fKn / (this.unitConstants[this.currentUnit] || 1);
         
-        // DIAGNOSTIC LOGGING (Requirement #6)
-        console.log(`[Force Calculation Audit] -----------------------------`);
-        console.log(`- Raw mV/V (def): ${def.toFixed(7)}`);
-        console.log(`- Software Zero Ref: ${softwareZero.toFixed(7)}`);
-        console.log(`- Net Deflection: ${netDef.toFixed(7)}`);
-        console.log(`- Calibration: A=${a}, B=${b}, C=${c}, Cap=${cap}`);
-        console.log(`- Force (kN): ${fKn.toFixed(7)}`);
-        console.log(`- Final Load: ${val.toFixed(2)} ${this.currentUnit}`);
+        // DIAGNOSTIC LOGGING (Requirement #6) removed for professional production release.
         
         this.updateChart(def);
       } catch (err) { console.error('[Polling Error]', err); }
@@ -857,7 +985,13 @@ class DMP41CalibrationApp {
       if (filter) { const f = filter.toLowerCase(); projects = projects.filter(p => (p.project_name || '').toLowerCase().includes(f) || (p.serial_number || '').toLowerCase().includes(f)); }
       if (projects.length === 0) { grid.innerHTML = '<p>No records found.</p>'; return; }
       window.appContext = this;
-      grid.innerHTML = projects.map(p => `<button style="display:flex; flex-direction:column; padding: 15px; border: 1px solid #ccc; border-radius: 8px; background: #fff; text-align: left; cursor: pointer;" onclick="window.appContext.viewHistoryProject(${p.id})"><strong style="font-size: 1.1em; color: #001D53; margin-bottom: 5px;">${p.project_name}</strong><span style="font-size: 0.85em; color: #555;">Date: ${new Date(p.updated_at).toLocaleString()}</span><span style="font-size: 0.85em; color: #555;">S/N: ${p.serial_number || 'N/A'}</span></button>`).join('');
+      grid.innerHTML = projects.map(p => `
+        <button style="display:flex; flex-direction:column; padding: 15px; border: 1px solid #ccc; border-radius: 8px; background: #fff; text-align: left; cursor: pointer; margin-bottom: 10px; width: 100%;" onclick="window.appContext.viewHistoryProject(${p.id})">
+          <strong style="font-size: 1.1em; color: #001D53; margin-bottom: 5px;">${p.project_name}</strong>
+          <span style="font-size: 0.85em; color: #555;">Date: ${new Date(p.updated_at).toLocaleString()}</span>
+          <span style="font-size: 0.85em; color: #555;">S/N: ${p.serial_number || 'N/A'}</span>
+        </button>
+      `).join('');
     } catch (err) { console.error(err); }
   }
 
@@ -1012,7 +1146,7 @@ class DMP41CalibrationApp {
 
   formatCellValue(val, isTarget = false, isReading = false) {
     if (val === null || val === undefined || val === "") return "";
-    return isReading ? parseFloat(val).toFixed(7) : parseFloat(val);
+    return isReading ? parseFloat(val).toFixed(6) : parseFloat(val);
   }
 
   initChart() {
@@ -1026,7 +1160,7 @@ class DMP41CalibrationApp {
   }
 
   async syncLoggerToExcel() {
-    if (!confirm("Export Live Sheet to PDF?")) return;
+    if (!confirm("Print Live Sheet to PDF?")) return;
     
     // Build live export data
     const liveData = this.buildLiveExportData();
@@ -1037,7 +1171,7 @@ class DMP41CalibrationApp {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(liveData)
       });
-      if (!res.ok) throw new Error("Export failed");
+      if (!res.ok) throw new Error("Print failed");
       
       // Handle file download from fetch
       const blob = await res.blob();
@@ -1051,7 +1185,7 @@ class DMP41CalibrationApp {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error(err);
-      alert("Failed to export live sheet.");
+      alert("Failed to print live sheet.");
     }
   }
 
@@ -1159,7 +1293,7 @@ class DMP41CalibrationApp {
         const v1m = this.formatCellValue(row.runs[0].m); const v1r = this.formatCellValue(row.runs[0].r, false, true);
         const v2m = this.formatCellValue(row.runs[1].m); const v2r = this.formatCellValue(row.runs[1].r, false, true);
         const v3m = this.formatCellValue(row.runs[2].m); const v3r = this.formatCellValue(row.runs[2].r, false, true);
-        return `<tr><td>${idx === 0 ? '0.0' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th')}</td><td><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${vt === "" ? 'l-t placeholder-dull' : 'l-t'}" data-idx="${idx}" value="${vt}" placeholder="- -"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td><td class="calculated" id="${prefix}t3-meanforce-${idx}">${row.meanIndicatedForce ? row.meanIndicatedForce.toFixed(2) : '- -'}</td><td class="calculated" id="${prefix}t3-meandef-${idx}">${row.meanRawDeflection ? row.meanRawDeflection.toFixed(7) : '- -'}</td></tr>`;
+        return `<tr><td>${idx === 0 ? '0.0' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th')}</td><td><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${vt === "" ? 'l-t placeholder-dull' : 'l-t'}" data-idx="${idx}" value="${vt}" placeholder="- -"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td><td class="calculated" id="${prefix}t3-meanforce-${idx}">${row.meanIndicatedForce ? row.meanIndicatedForce.toFixed(2) : '- -'}</td><td class="calculated" id="${prefix}t3-meandef-${idx}">${row.meanRawDeflection ? row.meanRawDeflection.toFixed(6) : '- -'}</td></tr>`;
       }).join('');
     }
 
@@ -1187,7 +1321,7 @@ class DMP41CalibrationApp {
     const forceEl = document.getElementById(`t3-meanforce-${idx}`);
     const defEl = document.getElementById(`t3-meandef-${idx}`);
     if (forceEl) forceEl.textContent = (row.meanIndicatedForce || 0).toFixed(2);
-    if (defEl) defEl.textContent = (row.meanRawDeflection || 0).toFixed(7);
+    if (defEl) defEl.textContent = (row.meanRawDeflection || 0).toFixed(6);
   }
 
   calculateFullSuite(prefix = '') {
@@ -1227,7 +1361,7 @@ class DMP41CalibrationApp {
       const m1 = row.runs[0].m !== null ? (row.runs[0].m * targetConst).toFixed(4) : '';
       const m2 = row.runs[1].m !== null ? (row.runs[1].m * targetConst).toFixed(4) : '';
       const m3 = row.runs[2].m !== null ? (row.runs[2].m * targetConst).toFixed(4) : '';
-      return `<tr><td>${row.point}</td><td class="calculated">${nets[0] !== null ? m1 : ''}</td><td class="calculated">${nets[0] !== null ? nets[0].toFixed(7) : ''}</td><td class="calculated">${nets[1] !== null ? m2 : ''}</td><td class="calculated">${nets[1] !== null ? nets[1].toFixed(7) : ''}</td><td class="calculated">${nets[2] !== null ? m3 : ''}</td><td class="calculated">${nets[2] !== null ? nets[2].toFixed(7) : ''}</td><td class="calculated">${row.meanForceKn ? (row.meanForceKn).toFixed(4) : ''}</td><td class="calculated">${row.mean ? row.mean.toFixed(7) : ''}</td></tr>`;
+      return `<tr><td>${row.point}</td><td class="calculated">${nets[0] !== null ? m1 : ''}</td><td class="calculated">${nets[0] !== null ? nets[0].toFixed(6) : ''}</td><td class="calculated">${nets[1] !== null ? m2 : ''}</td><td class="calculated">${nets[1] !== null ? nets[1].toFixed(6) : ''}</td><td class="calculated">${nets[2] !== null ? m3 : ''}</td><td class="calculated">${nets[2] !== null ? nets[2].toFixed(6) : ''}</td><td class="calculated">${row.meanForceKn ? (row.meanForceKn).toFixed(4) : ''}</td><td class="calculated">${row.mean ? row.mean.toFixed(6) : ''}</td></tr>`;
     }).join('');
   }
 
@@ -1238,7 +1372,7 @@ class DMP41CalibrationApp {
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     body.innerHTML = activeRows.map((row) => {
       const targetKn = (row.target || 0) * targetConst; const interps = row.interpolatedValues || [null,null,null];
-      return `<tr><td class="calculated">${targetKn.toFixed(4)}</td><td class="calculated">${interps[0] !== null ? interps[0].toFixed(7) : ''}</td><td class="calculated">${interps[1] !== null ? interps[1].toFixed(7) : ''}</td><td class="calculated">${interps[2] !== null ? interps[2].toFixed(7) : ''}</td><td class="calculated">${row.meanInterpolated ? row.meanInterpolated.toFixed(7) : ''}</td></tr>`;
+      return `<tr><td class="calculated">${targetKn.toFixed(4)}</td><td class="calculated">${interps[0] !== null ? interps[0].toFixed(6) : ''}</td><td class="calculated">${interps[1] !== null ? interps[1].toFixed(6) : ''}</td><td class="calculated">${interps[2] !== null ? interps[2].toFixed(6) : ''}</td><td class="calculated">${row.meanInterpolated ? row.meanInterpolated.toFixed(6) : ''}</td></tr>`;
     }).join('');
   }
 
@@ -1311,7 +1445,7 @@ class DMP41CalibrationApp {
         }
       }
       
-      const fmt = (v) => v !== null ? v.toFixed(7) : "";
+      const fmt = (v) => v !== null ? v.toFixed(6) : "";
       const fmtExp = (v) => v !== null ? v.toFixed(3) : "";
       const fmtErr = (v) => v !== null ? v.toFixed(2) : "";
 

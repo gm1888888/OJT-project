@@ -46,7 +46,17 @@ goto MENU
 :: ---------------------------------------------------------
 :START_SYSTEM
 echo.
-echo [1/4] Checking Node.js and Python...
+echo [1/5] Checking existing localhost instance...
+powershell -Command "$c = (Invoke-WebRequest -Uri 'http://localhost:3000/api/hardware/status' -UseBasicParsing -ErrorAction SilentlyContinue); if($c.StatusCode -eq 200){exit 0}else{exit 1}" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo [SUCCESS] Existing instance found and healthy.
+    echo [INFO] Reusing existing localhost session...
+    start "" "http://localhost:3000/auth"
+    timeout /t 2 /nobreak >nul
+    goto MENU
+)
+
+echo [2/5] Checking Node.js and Python...
 
 :: Check Node.js
 node -v >nul 2>&1
@@ -94,21 +104,24 @@ if !errorlevel! neq 0 (
     !PYTHON_CMD! -m pip install xlwings --quiet
 )
 
-echo [2/4] Cleaning up existing processes...
-taskkill /F /IM node.exe >nul 2>&1
-taskkill /F /IM excel.exe >nul 2>&1
-
-:: Kill port 3000
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 " ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>&1
+echo [3/5] Cleaning up existing processes...
+if exist "logs\server.pid" (
+    set /p NODE_PID=<"logs\server.pid"
+    taskkill /F /PID !NODE_PID! >nul 2>&1
+    del "logs\server.pid" >nul 2>&1
+) else (
+    :: Kill port 3000 as fallback
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 " ^| findstr "LISTENING"') do (
+        taskkill /F /PID %%a >nul 2>&1
+    )
 )
 
-echo [3/4] Starting Calibration Engine...
+echo [4/5] Starting Calibration Engine...
 :: Clear node log and start background
 echo Server Starting... > "%NODE_LOG%"
 start /B "DMP41_Node" cmd /c "node server.js >> %NODE_LOG% 2>&1"
 
-echo [4/4] Waiting for server...
+echo [5/5] Waiting for server...
 set "RETRY=0"
 
 :HEALTH_CHECK
@@ -142,8 +155,15 @@ if !errorlevel! equ 0 (
 :: ---------------------------------------------------------
 :STOP_SYSTEM
 echo Stopping System...
-taskkill /F /IM node.exe >nul 2>&1
-taskkill /F /IM excel.exe >nul 2>&1
+if exist "logs\server.pid" (
+    set /p NODE_PID=<"logs\server.pid"
+    taskkill /F /PID !NODE_PID! >nul 2>&1
+    del "logs\server.pid" >nul 2>&1
+) else (
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 " ^| findstr "LISTENING"') do (
+        taskkill /F /PID %%a >nul 2>&1
+    )
+)
 echo Done.
 pause
 goto MENU
@@ -153,8 +173,15 @@ goto MENU
 :: ---------------------------------------------------------
 :RESTART_SYSTEM
 echo Restarting System...
-taskkill /F /IM node.exe >nul 2>&1
-taskkill /F /IM excel.exe >nul 2>&1
+if exist "logs\server.pid" (
+    set /p NODE_PID=<"logs\server.pid"
+    taskkill /F /PID !NODE_PID! >nul 2>&1
+    del "logs\server.pid" >nul 2>&1
+) else (
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000 " ^| findstr "LISTENING"') do (
+        taskkill /F /PID %%a >nul 2>&1
+    )
+)
 timeout /t 2 /nobreak >nul
 goto START_SYSTEM
 
