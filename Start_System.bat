@@ -116,6 +116,9 @@ if exist "logs\server.pid" (
     )
 )
 
+:: Ensure no orphaned background Excel processes are left running from previous failed reports
+taskkill /F /IM excel.exe /T >nul 2>&1
+
 echo [4/5] Starting Calibration Engine...
 :: Clear node log and start background
 echo Server Starting... > "%NODE_LOG%"

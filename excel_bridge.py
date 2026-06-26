@@ -144,9 +144,9 @@ def populate_new_format(template_path, output_path, data):
         ws.range((T6_7_START - 2, 9)).value = f"Force ({output_unit})"
         
         # Table 7 sub-headers (Reference Force Estimation - Linear)
-        ws.range((T6_7_START - 1, 3)).value = "d1j"
-        ws.range((T6_7_START - 1, 4)).value = "d2j"
-        ws.range((T6_7_START - 1, 6)).value = "d3j"
+        ws.range((T6_7_START - 1, 3)).value = "1st (0˚)"
+        ws.range((T6_7_START - 1, 4)).value = "2nd (120˚)"
+        ws.range((T6_7_START - 1, 6)).value = "3rd (240˚)"
         ws.range((T6_7_START - 1, 7)).value = "Mean Value"
 
         # Table 8 sub-headers

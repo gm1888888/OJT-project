@@ -946,8 +946,10 @@ app.get('/api/export/project/:project_id', (req, res) => {
       project: project,
       points: points
     };
-    
-    res.setHeader('Content-disposition', `attachment; filename=DMP41_Project_${project.project_name || project.id}.json`);
+
+    const safeName = (project.project_name || 'Project').replace(/[^a-zA-Z0-9_-]/g, '');
+    const dateStr = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-disposition', `attachment; filename=${safeName}_${dateStr}_Export.json`);
     res.setHeader('Content-type', 'application/json');
     res.send(JSON.stringify(exportData, null, 2));
   } catch (err) {
@@ -971,87 +973,84 @@ app.post('/api/import/project', (req, res) => {
     const stmtCheck = db.prepare('SELECT id FROM calibration_projects WHERE project_name = ?');
     const existing = stmtCheck.all(newName);
 
-    if (existing.length > 0) {
-      if (strat === 'skip') {
-        return res.json({ status: 'skipped', message: 'Project already exists.' });
-      } else if (strat === 'replace') {
-        db.exec('BEGIN TRANSACTION');
-        try {
-          for (const ex of existing) {
-             db.prepare('DELETE FROM test_points WHERE project_id = ?').run(ex.id);
-             db.prepare('DELETE FROM transducer_coefficients WHERE project_id = ?').run(ex.id);
-             db.prepare('DELETE FROM calibration_results WHERE project_id = ?').run(ex.id);
-             db.prepare('DELETE FROM environmental_conditions WHERE project_id = ?').run(ex.id);
-             db.prepare('DELETE FROM calibration_projects WHERE id = ?').run(ex.id);
-          }
-          db.exec('COMMIT');
-        } catch(e) {
-          db.exec('ROLLBACK');
-          throw e;
+    if (existing.length > 0 && strat === 'skip') {
+      return res.json({ status: 'skipped', message: 'Project already exists.' });
+    }
+
+    // Start single atomic transaction for the entire import operation
+    db.exec('BEGIN TRANSACTION');
+    try {
+      if (existing.length > 0 && strat === 'replace') {
+        for (const ex of existing) {
+           db.prepare('DELETE FROM test_points WHERE project_id = ?').run(ex.id);
+           db.prepare('DELETE FROM transducer_coefficients WHERE project_id = ?').run(ex.id);
+           db.prepare('DELETE FROM calibration_results WHERE project_id = ?').run(ex.id);
+           db.prepare('DELETE FROM environmental_conditions WHERE project_id = ?').run(ex.id);
+           db.prepare('DELETE FROM calibration_projects WHERE id = ?').run(ex.id);
         }
       }
+
+      if (strat === 'copy' || existing.length === 0) {
+          // Apply naming convention for copied or completely new imported projects
+          let baseName = p.project_name;
+          const importedMatch = baseName.match(/^(.*?) \(Imported(?: \d+)?\)$/);
+          if (importedMatch) {
+              baseName = importedMatch[1];
+          }
+
+          newName = `${baseName} (Imported)`;
+          let counter = 1;
+          while (stmtCheck.get(newName)) {
+              newName = `${baseName} (Imported ${counter})`;
+              counter++;
+          }
+      }
+
+      const stmt = db.prepare(`
+        INSERT INTO calibration_projects 
+        (project_name, client_name, client_address, instrument_name, serial_number, capacity_kgf, range_min_kgf, range_max_kgf,
+         input_unit, output_unit, calibration_date, mode, status, 
+         temperature_before, temperature_after, humidity_before, humidity_after, 
+         coeff_a, coeff_b, coeff_c, ref_unc, resolution, zero_return_mvv, notes,
+         make_model, increment, range_text, ref_model, ref_capacity, ref_sn, ref_cert, ref_date,
+         is_archived, lc_make, lc_sn, ind_make, ind_sn, capacity_text, standard_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      const ptStmt = db.prepare(`
+        INSERT INTO test_points 
+        (project_id, stage_name, target_value_kgf, measurement_sequence, angular_position, raw_reading_mvv, zero_corrected_mvv,
+         equivalent_force_kn, machine_indicated_kgf, series_number, is_zero_return, reading_timestamp, is_valid, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const result = stmt.run(
+        newName, p.client_name, p.client_address, p.instrument_name, p.serial_number, p.capacity_kgf, p.range_min_kgf, p.range_max_kgf,
+        p.input_unit, p.output_unit, p.calibration_date, p.mode, 'Saved',
+        p.temperature_before, p.temperature_after, p.humidity_before, p.humidity_after,
+        p.coeff_a, p.coeff_b, p.coeff_c, p.ref_unc, p.resolution, p.zero_return_mvv, p.notes,
+        p.make_model, p.increment, p.range_text, p.ref_model, p.ref_capacity, p.ref_sn, p.ref_cert, p.ref_date,
+        p.is_archived || 0, p.lc_make, p.lc_sn, p.ind_make, p.ind_sn, p.capacity_text, p.standard_id
+      );
+
+      const newProjectId = result.lastInsertRowid;
+
+      if (data.points && data.points.length > 0) {
+        data.points.forEach(pt => {
+          ptStmt.run(
+            newProjectId, pt.stage_name, pt.target_value_kgf, pt.measurement_sequence, pt.angular_position, pt.raw_reading_mvv, pt.zero_corrected_mvv,
+            pt.equivalent_force_kn, pt.machine_indicated_kgf, pt.series_number, pt.is_zero_return, pt.reading_timestamp, pt.is_valid, pt.notes
+          );
+        });
+      }
+      
+      db.exec('COMMIT');
+      res.json({ status: 'success', imported_count: 1, new_project_id: newProjectId });
+    } catch (err) {
+      try { db.exec('ROLLBACK'); } catch(e) {}
+      throw err; // Re-throw to be caught by the outer catch
     }
-
-    if (strat === 'copy' || existing.length === 0) {
-        // Apply naming convention for copied or completely new imported projects
-        let baseName = p.project_name;
-        const importedMatch = baseName.match(/^(.*?) \(Imported(?: \d+)?\)$/);
-        if (importedMatch) {
-            baseName = importedMatch[1];
-        }
-
-        newName = `${baseName} (Imported)`;
-        let counter = 1;
-        while (stmtCheck.get(newName)) {
-            newName = `${baseName} (Imported ${counter})`;
-            counter++;
-        }
-    }
-
-    const stmt = db.prepare(`
-      INSERT INTO calibration_projects 
-      (project_name, client_name, client_address, instrument_name, serial_number, capacity_kgf, range_min_kgf, range_max_kgf,
-       input_unit, output_unit, calibration_date, mode, status, 
-       temperature_before, temperature_after, humidity_before, humidity_after, 
-       coeff_a, coeff_b, coeff_c, ref_unc, resolution, zero_return_mvv, notes,
-       make_model, increment, range_text, ref_model, ref_capacity, ref_sn, ref_cert, ref_date,
-       is_archived, lc_make, lc_sn, ind_make, ind_sn, capacity_text, standard_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    const ptStmt = db.prepare(`
-      INSERT INTO test_points 
-      (project_id, stage_name, target_value_kgf, measurement_sequence, angular_position, raw_reading_mvv, zero_corrected_mvv,
-       equivalent_force_kn, machine_indicated_kgf, series_number, is_zero_return, reading_timestamp, is_valid, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    db.exec('BEGIN TRANSACTION');
-    
-    const result = stmt.run(
-      newName, p.client_name, p.client_address, p.instrument_name, p.serial_number, p.capacity_kgf, p.range_min_kgf, p.range_max_kgf,
-      p.input_unit, p.output_unit, p.calibration_date, p.mode, 'Saved',
-      p.temperature_before, p.temperature_after, p.humidity_before, p.humidity_after,
-      p.coeff_a, p.coeff_b, p.coeff_c, p.ref_unc, p.resolution, p.zero_return_mvv, p.notes,
-      p.make_model, p.increment, p.range_text, p.ref_model, p.ref_capacity, p.ref_sn, p.ref_cert, p.ref_date,
-      p.is_archived || 0, p.lc_make, p.lc_sn, p.ind_make, p.ind_sn, p.capacity_text, p.standard_id
-    );
-
-    const newProjectId = result.lastInsertRowid;
-
-    if (data.points && data.points.length > 0) {
-      data.points.forEach(pt => {
-        ptStmt.run(
-          newProjectId, pt.stage_name, pt.target_value_kgf, pt.measurement_sequence, pt.angular_position, pt.raw_reading_mvv, pt.zero_corrected_mvv,
-          pt.equivalent_force_kn, pt.machine_indicated_kgf, pt.series_number, pt.is_zero_return, pt.reading_timestamp, pt.is_valid, pt.notes
-        );
-      });
-    }
-    
-    db.exec('COMMIT');
-    res.json({ status: 'success', imported_count: 1, new_project_id: newProjectId });
   } catch (err) {
-    try { db.exec('ROLLBACK'); } catch(e) {}
     res.status(500).json({ error: err.message });
   }
 });
@@ -1078,12 +1077,24 @@ app.post('/api/export/excel/live', async (req, res) => {
       project_name: liveData.project_name || 'Live_Project',
       client_name: liveData.client_name || '',
       client_address: liveData.client_address || '',
+      date: liveData.calibration_date || new Date().toISOString(),
       calibration_date: liveData.calibration_date || new Date().toISOString(),
       mode: liveData.mode || 'Compression',
+      capacity: liveData.capacity_kgf || 0,
       capacity_kgf: liveData.capacity_kgf || 0,
-      capacity_text: liveData.capacity_kgf ? liveData.capacity_kgf + ' kgf' : '',
+      capacity_text: liveData.capacity_text || (liveData.capacity_kgf ? liveData.capacity_kgf + ' kgf' : ''),
+      instrument: liveData.instrument_name || '',
       instrument_name: liveData.instrument_name || '',
+      serial: liveData.serial_number || '',
       serial_number: liveData.serial_number || '',
+      
+      range: liveData.range || '',
+      increment: liveData.increment || '',
+      resolution: liveData.resolution || '',
+      lc_make: liveData.lc_make || '',
+      lc_sn: liveData.lc_sn || '',
+      ind_make: liveData.ind_make || '',
+      ind_sn: liveData.ind_sn || '',
       
       ref_cert: liveData.std_cert || '',
       ref_date: liveData.std_date || '',
@@ -1156,12 +1167,24 @@ app.post('/api/export/pdf/live', async (req, res) => {
       project_name: liveData.project_name || 'Live_Project',
       client_name: liveData.client_name || '',
       client_address: liveData.client_address || '',
+      date: liveData.calibration_date || new Date().toISOString(),
       calibration_date: liveData.calibration_date || new Date().toISOString(),
       mode: liveData.mode || 'Compression',
+      capacity: liveData.capacity_kgf || 0,
       capacity_kgf: liveData.capacity_kgf || 0,
-      capacity_text: liveData.capacity_kgf ? liveData.capacity_kgf + ' kgf' : '',
+      capacity_text: liveData.capacity_text || (liveData.capacity_kgf ? liveData.capacity_kgf + ' kgf' : ''),
+      instrument: liveData.instrument_name || '',
       instrument_name: liveData.instrument_name || '',
+      serial: liveData.serial_number || '',
       serial_number: liveData.serial_number || '',
+      
+      range: liveData.range || '',
+      increment: liveData.increment || '',
+      resolution: liveData.resolution || '',
+      lc_make: liveData.lc_make || '',
+      lc_sn: liveData.lc_sn || '',
+      ind_make: liveData.ind_make || '',
+      ind_sn: liveData.ind_sn || '',
       
       ref_cert: liveData.std_cert || '',
       ref_date: liveData.std_date || '',

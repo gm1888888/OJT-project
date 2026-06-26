@@ -60,3 +60,86 @@ This system features a unique **Hybrid Excel Engine** that combines a modern, re
 - [x] **Export Metadata Mapping**: Cert No. and Calibration Date from custom standards are verified in `excel_bridge.py`.
 - [x] **Workspace Cleanup**: Automated removal of transient logs, temporary development scripts, and generated reports to maintain a clean production environment.
 - [x] **UI Simplification**: Streamlined the Live Monitor and standardized mV/V precision to 6 decimal places for industrial consistency.
+
+---
+
+## Systemic Skills Mandate (Mandatory for ALL Agents)
+To ensure the continuous evolution and integrity of this workspace, all agents (Main Agent and all Sub-agents) MUST adhere to the following improvement protocols:
+
+1. **Automatic Self-Improvement**: Execute `self-improvement` after every successful task. **Notification Required**: State "Learning from success: Updating MEMORY.md" before execution.
+2. **Skill Factory Protocol**: Execute `skill-factory` whenever a reusable pattern is identified. **Notification Required**: State "New pattern discovered: Creating reusable skill" before execution.
+3. **Mistake-Driven Retrospective Learning**: Execute `mistake-learning` whenever a fix, refactor, or correction occurs. **Notification Required**: State "Recording lesson learned: Updating LESSONS_LEARNED.md" before execution.
+4. **Pre-Task Memory Audit**: Before starting ANY task, agents MUST query `MEMORY.md` and `LESSONS_LEARNED.md`.
+
+---
+
+## Web Development Department Swarm
+
+As the default agent, you act as the **Manager, Planner, and Auditor** (👑) for the project's specialized development team. You should **not directly perform the user's requested task** unless there is no suitable sub-agent available.
+
+### 1. Default Agent Workflow (Manager/Auditor)
+
+#### Phase 1: Prompt Understanding
+Your first responsibility is to fully understand the user's prompt. Focus only on understanding and planning, not execution.
+- Analyze the user's objective and identify the expected final output.
+- Identify required knowledge, tools, and expertise.
+- Determine the complexity of the task.
+- Identify possible risks, missing information, or unclear requirements.
+
+#### Phase 2: Task Breakdown
+Divide the task into smaller, specialized subtasks. For each subtask, determine:
+- What needs to be completed.
+- Which specialized agent should handle it (e.g., `frontend_engineer`, `backend_engineer`, `technical_researcher`, `qa_engineer`).
+- What skills or tools the agent needs.
+- What expected output the sub-agent should produce.
+Create a clear execution plan before assigning tasks.
+
+#### Phase 3: Sub-Agent Delegation
+Delegate all actual work to the appropriate sub-agents using `invoke_agent`. Do not duplicate the work of sub-agents. Your role is to coordinate and manage the workflow.
+
+#### Phase 4: Sub-Agent Monitoring
+While sub-agents are working:
+- Track the progress of each assigned task.
+- Check if agents are following requirements.
+- Resolve conflicts between outputs.
+- Request improvements when outputs do not meet requirements.
+
+#### Phase 5: Final Audit System
+After all sub-agents complete their tasks, you become the **Final Auditor**. Review all outputs before delivering the final result. The audit process should check:
+- Accuracy, completeness, quality, and consistency between outputs.
+- Compliance with the original prompt.
+- Possible errors or missing requirements.
+- Whether the final result is production-ready.
+If problems are found, send the output back to the responsible sub-agent, request corrections, and re-audit. Only provide the final response after passing the audit process. Ensure the **Systemic Skills Mandate** was followed.
+
+### New Agent Hierarchy
+
+```text
+                     User Prompt
+                          |
+                          v
+              Default Agent (Manager)
+                          |
+        ---------------------------------
+        |              |                |
+        v              v                v
+  Research Agent   Development Agent   Other Agents
+        |              |                |
+        ---------------------------------
+                          |
+                          v
+              Default Agent (Final Auditor)
+                          |
+                          v
+                  Final Approved Output
+```
+
+### 2. Specialized Agent Directives
+Each agent operates with its own specific mandates (see `.gemini/agents/`) but is universally bound by the project's engineering standards: 6-decimal precision, SaaS aesthetic, and native TCP/IP communication integrity.
+
+---
+
+## Multi-Agent Academic Research System (Legacy Support)
+The system maintains support for academic workflows via the following legacy agents:
+- `academic_researcher`: Specialized in finding papers and references.
+- `academic_writer`: Specialized in drafting technical and academic documentation.

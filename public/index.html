@@ -39,6 +39,9 @@
     <section id="project-toolbar" class="panel full-width" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
       <div style="display: flex; gap: 10px; border: 1px solid #ddd; padding: 5px; border-radius: 5px; background: #f9f9f9;">
         <button id="btn-new-project" >New Project</button>
+        <button id="btn-import-live" style="background: #17a2b8; color: white;">Import</button>
+        <button id="btn-export-live" style="background: #8b5cf6; color: white;">Export</button>
+        <input type="file" id="file-import-live" style="display: none;" accept=".json">
       </div>
     </section>
 
@@ -427,7 +430,7 @@
 
         <!-- Table 2 Replica -->
         <div class="replica-section">
-          <h3>2.) PRE-LOADING DATA, <span class="sys-unit">kgf</span></h3>
+          <h3>2.) PRE-LOADING DATA, <span class="hist-sys-unit">kgf</span></h3>
           <table class="excel-table table-2">
             <thead>
               <tr class="excel-header-main">
@@ -443,7 +446,7 @@
 
         <!-- Table 3 Replica -->
         <div class="replica-section">
-          <h3>3.) MEASURED DATA, <span class="sys-unit">kgf</span></h3>
+          <h3>3.) MEASURED DATA, <span class="hist-sys-unit">kgf</span></h3>
           <table class="excel-table table-3">
             <thead>
               <tr class="excel-header-main">
@@ -503,7 +506,7 @@
           <table class="excel-table" style="table-layout: fixed; word-wrap: break-word;">
             <thead>
               <tr class="excel-header-sub">
-                <th></th><th>Deflection 1 (d1j)</th><th>Deflection 2 (d2j)</th><th>Deflection 3 (d3j)</th><th>Mean Deflection (dj)</th>
+                <th></th><th>1st (0˚)</th><th>2nd (120˚)</th><th>3rd (240˚)</th><th>Mean Value</th>
               </tr>
             </thead>
             <tbody id="hist-t7-body"></tbody>

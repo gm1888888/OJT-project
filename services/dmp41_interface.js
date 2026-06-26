@@ -264,6 +264,8 @@ class DMP41Interface {
     const timeout = setTimeout(() => {
       if (this.currentPendingCommand === pending) {
         pending.reject(new Error(`Command timeout: ${pending.command}`));
+        this._log(`Command timeout: ${pending.command}. Clearing stale dataBuffer.`, 'WARN');
+        this.dataBuffer = ''; // Clear stale buffer to prevent corruption
         this.currentPendingCommand = null;
         this.processQueue();
       }

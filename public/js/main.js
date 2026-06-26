@@ -144,6 +144,124 @@ class DMP41CalibrationApp {
     return Math.sqrt(arr.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b, 0) / (n - 1));
   }
 
+  showValidationFeedback(el, fieldName, errorType, guidanceMsg) {
+    document.querySelectorAll('.validation-toast').forEach(t => t.remove());
+
+    const toast = document.createElement('div');
+    toast.className = 'validation-toast';
+    toast.innerHTML = `
+        <h4><svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Validation Error</h4>
+        <div class="field-name">Field: ${fieldName}</div>
+        <div class="error-type">Error: ${errorType}</div>
+        <div class="message">${guidanceMsg}</div>
+        <button onclick="this.parentElement.remove()" style="position:absolute; top: 12px; right: 12px; background:none; border:none; cursor:pointer; color:#94a3b8; font-size: 1.2rem;">✕</button>
+    `;
+    document.body.appendChild(toast);
+
+    el.classList.add('input-error');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Slight delay to allow scrolling before focusing
+    setTimeout(() => el.focus(), 300);
+
+    const removeError = () => {
+        el.classList.remove('input-error');
+        toast.remove();
+        el.removeEventListener('input', removeError);
+        el.removeEventListener('change', removeError);
+    };
+    el.addEventListener('input', removeError);
+    el.addEventListener('change', removeError);
+  }
+
+  validateField(id, name, type, customMsg) {
+     const el = document.getElementById(id);
+     if (!el) return true;
+     let val = el.value.trim();
+     let isValid = true;
+     let errorType = 'Missing input';
+
+     if (type === 'string' && val === '') isValid = false;
+     if (type === 'number') {
+         if (val === '') {
+             isValid = false;
+         } else if (isNaN(parseFloat(val))) {
+             isValid = false;
+             errorType = 'Invalid format (Must be a number)';
+         }
+     }
+     if (type === 'select' && (val === '' || val === 'none')) {
+         isValid = false;
+     }
+
+     if (!isValid) {
+         this.showValidationFeedback(el, name, errorType, customMsg);
+         return false;
+     }
+     return true;
+  }
+
+  validateNewProject() {
+    if (!this.validateField('np-name', 'Reference Number', 'string', 'Project Reference Number is required to uniquely identify this calibration.')) return false;
+    if (!this.validateField('np-client-name', 'Client Name', 'string', 'Client Name is required for the calibration certificate.')) return false;
+    if (!this.validateField('np-capacity', 'Machine Capacity', 'number', 'Machine Capacity is required. Please enter the maximum capacity as a number (e.g., 2000).')) return false;
+    if (!this.validateField('np-item', 'Instrument Name', 'string', 'Instrument Name is required.')) return false;
+    if (!this.validateField('np-date', 'Calibration Date', 'string', 'Calibration Date is required.')) return false;
+    
+    if (!this.currentUnit) {
+        alert("System Unit is required. Please select the measurement unit used in this analysis.");
+        return false;
+    }
+    return true;
+  }
+
+  validateWorkspace() {
+    const requiredFields = [
+      { id: 't1-client-name', name: 'Client Name', type: 'string', msg: 'Client Name is required for the calibration certificate.' },
+      { id: 't1-date', name: 'Calibration Date', type: 'string', msg: 'Calibration Date is required.' },
+      { id: 't1-ref-no', name: 'Reference Number', type: 'string', msg: 'Project Reference Number is required to uniquely identify this calibration.' },
+      { id: 't1-capacity', name: 'Machine Capacity', type: 'number', msg: 'Machine Capacity is required. Please enter the maximum capacity as a number (e.g., 2000).' },
+      { id: 't1-item', name: 'Instrument Name', type: 'string', msg: 'Instrument Name is required.' },
+      { id: 't1-lc-make', name: 'Load Cell Make / Model', type: 'string', msg: 'Load Cell Make / Model is required.' },
+      { id: 't1-lc-sn', name: 'Load Cell Serial No.', type: 'string', msg: 'Load Cell Serial No. is required.' },
+      { id: 't1-ind-make', name: 'Indicator Make / Model', type: 'string', msg: 'Indicator Make / Model is required.' },
+      { id: 't1-ind-sn', name: 'Indicator Serial No.', type: 'string', msg: 'Indicator Serial No. is required.' },
+      { id: 't1-range', name: 'Range', type: 'string', msg: 'Range is required.' },
+      { id: 't1-increment', name: 'Increment', type: 'string', msg: 'Increment is required.' },
+      { id: 't1-resolution', name: 'Resolution', type: 'number', msg: 'Resolution is required.' },
+      { id: 'lc-selector', name: 'Reference Standard', type: 'select', msg: 'Reference Standard is required. Please enter the standard used for calibration (example: ISO 17025, ASTM E4, or applicable standard).' },
+      { id: 't4-model', name: 'Reference Standard Model', type: 'string', msg: 'Reference Standard Model is required.' },
+      { id: 't4-cert', name: 'Reference Standard Cert No.', type: 'string', msg: 'Reference Standard Cert No. is required.' },
+      { id: 't4-date', name: 'Reference Standard Date', type: 'string', msg: 'Reference Standard Date is required.' },
+      { id: 't4-a', name: 'Coefficient A', type: 'number', msg: 'Coefficient A is critical for accurate force conversions.' }
+    ];
+
+    for (const field of requiredFields) {
+      if (!this.validateField(field.id, field.name, field.type, field.msg)) {
+          return false;
+      }
+    }
+
+    if (!this.currentUnit) {
+        alert("System Unit is required. Please select the measurement unit used in this analysis.");
+        return false;
+    }
+
+    let hasData = false;
+    if (this.loggerData && this.loggerData.measured) {
+      hasData = this.loggerData.measured.some(row => 
+        row.runs.some(run => run.m !== null || run.r !== null)
+      );
+    }
+
+    if (!hasData) {
+        alert('Cannot proceed.\n\nMissing required information:\n- Calibration Measurement Data (Table 3)\n\nPlease enter the required calibration data before saving or printing.');
+        return false;
+    }
+
+    return true;
+  }
+
   enforceUIState() {
     const btnStartPolling = document.getElementById('btn-start-polling');
     const btnStopPolling = document.getElementById('btn-stop-polling');
@@ -338,6 +456,29 @@ class DMP41CalibrationApp {
         this.resetWorkspace();
       }
     });
+
+    const btnExportLive = document.getElementById('btn-export-live');
+    if (btnExportLive) btnExportLive.addEventListener('click', () => this.exportLiveProject());
+
+    const btnImportLive = document.getElementById('btn-import-live');
+    const fileImportLive = document.getElementById('file-import-live');
+    if (btnImportLive && fileImportLive) {
+      btnImportLive.addEventListener('click', () => fileImportLive.click());
+      fileImportLive.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const json = JSON.parse(text);
+          this.isLiveImport = true;
+          this.handleImportPackage(json);
+        } catch (err) {
+          alert('Failed to parse or import project file: ' + err.message);
+        }
+        fileImportLive.value = ''; // Reset
+      });
+    }
+
     const btnSubmitProject = document.getElementById('btn-submit-project');
     if (btnSubmitProject) btnSubmitProject.addEventListener('click', () => this.createProject());
 
@@ -397,6 +538,10 @@ class DMP41CalibrationApp {
     document.getElementById('btn-import-close').onclick = () => {
       modal.style.display = 'none';
       this.loadHistory();
+      if (this.isLiveImport) {
+          this.loadProjects();
+          this.isLiveImport = false;
+      }
     };
   }
 
@@ -799,12 +944,17 @@ class DMP41CalibrationApp {
     document.getElementById('btn-start-polling').disabled = true; 
     document.getElementById('btn-stop-polling').disabled = false;
     
+    let failedPollCount = 0; // Watchdog counter
+
     this.pollInterval = setInterval(async () => {
       try {
         // 1. Fetch Precision Signal (mV/V)
         const resNet = await fetch('/api/hardware/read?channel=1&type=24'); 
+        if (!resNet.ok) throw new Error(`HTTP error! status: ${resNet.status}`);
         const dNet = await resNet.json();
         const def = dNet.raw_deflection || 0; 
+        
+        failedPollCount = 0; // Reset watchdog on success
 
         this.currentReadings.push({ timestamp: new Date(), raw_mvv: def });
         if (this.currentReadings.length > 50) this.currentReadings.shift();
@@ -837,8 +987,22 @@ class DMP41CalibrationApp {
         // DIAGNOSTIC LOGGING (Requirement #6) removed for professional production release.
         
         this.updateChart(def);
-      } catch (err) { console.error('[Polling Error]', err); }
-    }, 400);
+      } catch (err) { 
+        console.error('[Polling Error]', err);
+        failedPollCount++;
+        if (failedPollCount >= 3) {
+          document.getElementById('reading-mvv').textContent = 'ERR: LOST';
+          document.getElementById('reading-mvv').style.color = '#ef4444';
+          const mvvStatus = document.getElementById('reading-mvv-status');
+          if (mvvStatus) {
+            mvvStatus.textContent = 'DISCONNECTED';
+            mvvStatus.style.background = '#fee2e2';
+            mvvStatus.style.color = '#b91c1c';
+          }
+          // Optionally auto-stop or just keep trying
+        }
+      }
+    }, 1000);
   }
 
   stopPolling() { 
@@ -856,6 +1020,16 @@ class DMP41CalibrationApp {
     const clientAddress = document.getElementById('np-client-address').value;
 
     if (!n || !c) { alert("Ref. No. and Capacity required."); return; }
+
+    // --- UNIT GUARD ---
+    if (this.currentUnit !== 'kgf') {
+      const msg = `UNIT GUARD WARNING:\nYou are creating a project with an output unit of ${this.currentUnit}, but the default input unit is kgf.\n\nHave you verified that your load cell coefficients (A, B, C) are scaled correctly for ${this.currentUnit}?`;
+      if (!confirm(msg)) {
+         this.setSystemUnit('kgf'); // Revert to safe default
+         return;
+      }
+    }
+
     try {
       await fetch('/api/calibration/projects', { 
         method: 'POST', 
@@ -877,6 +1051,7 @@ class DMP41CalibrationApp {
           increment: inc, 
           serial_number: ls, 
           resolution: res,
+          input_unit: 'kgf',
           output_unit: this.currentUnit,
           standard_id: document.getElementById('lc-selector')?.value || ''
         }) 
@@ -894,12 +1069,14 @@ class DMP41CalibrationApp {
   }
 
   async saveToHistory(manual = false, saveAs = false) {
+    if (!this.validateWorkspace()) return;
+
     if (manual && !confirm(saveAs ? "Save as a new project?" : "Update the current project?")) return;
     if (saveAs) { this.currentProject = null; }
 
     const projectSynced = await this.syncProjectData();
     if (!projectSynced) {
-        if (manual) alert("Failed to save project metadata. Please ensure Ref. No. and Capacity are filled.");
+        if (manual) alert("Failed to save project metadata. Please ensure Ref. No. and Capacity are filled, and Unit mismatches are confirmed.");
         return;
     }
 
@@ -929,6 +1106,16 @@ class DMP41CalibrationApp {
     const clientAddress = document.getElementById('t1-client-address')?.value;
     
     if (!n || !c) return false;
+
+    // --- UNIT GUARD ---
+    if (this.currentUnit !== 'kgf' && !window._unitGuardConfirmed) {
+      const msg = `UNIT GUARD WARNING:\nYou are saving a project with an output unit of ${this.currentUnit}, but the target inputs are in kgf.\n\nHave you verified that your load cell coefficients (A, B, C) are scaled correctly to output ${this.currentUnit}?`;
+      if (!confirm(msg)) {
+         return false; // Abort sync
+      }
+      window._unitGuardConfirmed = true; // Only ask once per session to avoid annoying the user
+    }
+
     const payload = { 
       project_name: n, 
       client_name: clientName,
@@ -958,6 +1145,7 @@ class DMP41CalibrationApp {
       temperature_after: parseFloat(ta)||0, 
       humidity_before: parseFloat(hb)||0, 
       humidity_after: parseFloat(ha)||0, 
+      input_unit: 'kgf',
       output_unit: this.currentUnit 
     };
     try {
@@ -1018,6 +1206,9 @@ class DMP41CalibrationApp {
           return { point: i, target: x.targetForceKgf || 0, runs, meanIndicatedForce: am.length?am.reduce((a,b)=>a+b)/am.length:0, meanRawDeflection: ar.length?ar.reduce((a,b)=>a+b)/ar.length:0, mean: x.meanNetDeflection || 0, meanForce: (x.meanForceKn || 0) / s, netValues: x.netValues || [0,0,0], runForcesKn: x.runForcesKn || [0,0,0], uncertainty: x.expandedUncertaintyPercent || 0, class: x.classification || 'N/A' };
       })};
       this.calculateFullSuite('hist-'); this.renderReplicaTables('hist-');
+      document.querySelectorAll('.hist-sys-unit').forEach(el => {
+        el.textContent = p.output_unit || 'kgf';
+      });
       document.getElementById('modal-history-list').style.display = 'none'; document.getElementById('modal-archive-list').style.display = 'none'; document.getElementById('modal-history-view').style.display = 'flex';
       document.getElementById('history-view-title').textContent = this.currentHistoricalData.is_archived ? 'Archived Data' : 'Historical Data';
       document.getElementById('btn-hist-archive').style.display = this.currentHistoricalData.is_archived ? 'none' : 'inline-block';
@@ -1076,6 +1267,40 @@ class DMP41CalibrationApp {
         setVal('t4-a', p.coeff_a); setVal('t4-b', p.coeff_b); setVal('t4-c', p.coeff_c); setVal('t4-u', p.ref_unc);
         setVal('t5-temp-b', p.temperature_before); setVal('t5-temp-a', p.temperature_after);
         setVal('t5-hum-b', p.humidity_before); setVal('t5-hum-a', p.humidity_after);
+        
+        // Restore Reference Standard
+        if (p.standard_id) {
+            setVal('lc-selector', p.standard_id);
+            // Trigger the onchange manually to load coefficients if needed (though they are already loaded above)
+        }
+
+        // Restore System Unit
+        if (p.output_unit) {
+            this.setSystemUnit(p.output_unit);
+        }
+
+        // Restore and Format Date
+        if (p.calibration_date) {
+            const dateEl = document.getElementById('t1-date');
+            if (dateEl) {
+                // To display "Monday, June 15, 2026", we switch the input type to text.
+                dateEl.type = 'text';
+                const dateObj = new Date(p.calibration_date);
+                const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                dateEl.value = dateObj.toLocaleDateString(undefined, options);
+                
+                // Add event listeners so it behaves like a date picker on focus
+                dateEl.onfocus = () => { dateEl.type = 'date'; dateEl.value = p.calibration_date.split('T')[0]; };
+                dateEl.onblur = () => { 
+                    if (dateEl.value) {
+                        dateEl.type = 'text';
+                        const newDate = new Date(dateEl.value);
+                        dateEl.value = newDate.toLocaleDateString(undefined, options);
+                    }
+                };
+            }
+        }
+
         
         this.loggerData.preloading = this.currentHistoricalData.preloading.map(x => JSON.parse(JSON.stringify(x)));
         this.loggerData.measured = this.currentHistoricalData.measured.map(x => {
@@ -1160,6 +1385,7 @@ class DMP41CalibrationApp {
   }
 
   async syncLoggerToExcel() {
+    if (!this.validateWorkspace()) return;
     if (!confirm("Print Live Sheet to PDF?")) return;
     
     // Build live export data
@@ -1189,6 +1415,47 @@ class DMP41CalibrationApp {
     }
   }
 
+  async exportLiveProject() {
+    if (!this.validateWorkspace()) return;
+    
+    // Auto-save before export to ensure database has the latest metadata and points
+    const projectSynced = await this.syncProjectData();
+    if (!projectSynced) return;
+    const pointsSynced = await this.syncPointsData();
+    if (!pointsSynced) return;
+
+    if (!this.currentProject || !this.currentProject.id) {
+        alert("Failed to sync project to database for export.");
+        return;
+    }
+
+    // Fetch the raw export package from the backend
+    try {
+        const res = await fetch(`/api/export/project/${this.currentProject.id}`);
+        if (!res.ok) throw new Error("Failed to export project.");
+        
+        const exportData = await res.json();
+        const jsonString = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        const baseName = (this.currentProject.project_name || 'Calibration').replace(/[^a-z0-9]/gi, '_');
+        const dateStr = new Date().toISOString().split('T')[0];
+        a.download = `${baseName}_${dateStr}_Export.json`;
+        
+        document.body.appendChild(a);
+        a.click();
+        
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error("Export Error:", err);
+        alert("An error occurred during export.");
+    }
+  }
+
   buildLiveExportData() {
     const p = this.currentProject || {};
     const d = (id) => document.getElementById(id)?.value || '';
@@ -1199,6 +1466,14 @@ class DMP41CalibrationApp {
       instrument_name: d('t1-item'),
       serial_number: d('t1-ind-sn'),
       capacity_kgf: parseFloat(d('t1-capacity')) || 0,
+      capacity_text: d('t1-capacity'),
+      range: d('t1-range'),
+      increment: d('t1-increment'),
+      resolution: parseFloat(d('t1-resolution')) || 0.01,
+      lc_make: d('t1-lc-make'),
+      lc_sn: d('t1-lc-sn'),
+      ind_make: d('t1-ind-make'),
+      ind_sn: d('t1-ind-sn'),
       range_min_kgf: 0,
       range_max_kgf: parseFloat(d('t1-capacity')) || 0,
       input_unit: 'kgf',
@@ -1325,12 +1600,13 @@ class DMP41CalibrationApp {
   }
 
   calculateFullSuite(prefix = '') {
-    let a, b, c, targetConst;
+    let a, b, c, targetConst, activeUnit;
     if (prefix === '') { a = parseFloat(document.getElementById('t4-a')?.value || 1); b = parseFloat(document.getElementById('t4-b')?.value || 0); c = parseFloat(document.getElementById('t4-c')?.value || 0); }
     else { a = parseFloat(document.getElementById('hist-t4-a')?.textContent || 1); b = parseFloat(document.getElementById('hist-t4-b')?.textContent || 0); c = parseFloat(document.getElementById('hist-t4-c')?.textContent || 0); }
-    targetConst = this.unitConstants[this.currentUnit];
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
     if (!data) return;
+    activeUnit = prefix === '' ? this.currentUnit : (data.output_unit || 'kgf');
+    targetConst = this.unitConstants[activeUnit] || 1;
     const z1 = data.measured[0].runs[0].r, z2 = data.measured[0].runs[1].r, z3 = data.measured[0].runs[2].r;
     data.measured.forEach((row, idx) => {
       const activeMs = row.runs.map(r => r.m).filter(m => m !== null), activeRs = row.runs.map(r => r.r).filter(r => r !== null);
@@ -1353,8 +1629,9 @@ class DMP41CalibrationApp {
 
   renderTable6(prefix = '') {
     const body = document.getElementById(`${prefix}t6-body`); if (!body) return;
-    const targetConst = this.unitConstants[this.currentUnit];
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
+    const activeUnit = prefix === '' ? this.currentUnit : (data?.output_unit || 'kgf');
+    const targetConst = this.unitConstants[activeUnit] || 1;
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     body.innerHTML = activeRows.map((row) => {
       const nets = row.netValues || [null,null,null];
@@ -1367,8 +1644,9 @@ class DMP41CalibrationApp {
 
   renderTable7(prefix = '') {
     const body = document.getElementById(`${prefix}t7-body`); if (!body) return;
-    const targetConst = this.unitConstants[this.currentUnit];
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
+    const activeUnit = prefix === '' ? this.currentUnit : (data?.output_unit || 'kgf');
+    const targetConst = this.unitConstants[activeUnit] || 1;
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     body.innerHTML = activeRows.map((row) => {
       const targetKn = (row.target || 0) * targetConst; const interps = row.interpolatedValues || [null,null,null];
@@ -1378,8 +1656,9 @@ class DMP41CalibrationApp {
 
   renderTable8(prefix = '') {
     const body = document.getElementById(`${prefix}t8-body`); if (!body) return;
-    const targetConst = this.unitConstants[this.currentUnit];
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
+    const activeUnit = prefix === '' ? this.currentUnit : (data?.output_unit || 'kgf');
+    const targetConst = this.unitConstants[activeUnit] || 1;
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     body.innerHTML = activeRows.map((row) => {
       const targetKn = (row.target || 0) * targetConst; const fKn = row.runForcesKn || [null,null,null];
@@ -1392,8 +1671,9 @@ class DMP41CalibrationApp {
     let refU, res, drift;
     if (prefix === '') { refU = parseFloat(document.getElementById('t4-u')?.value || 0.02); res = parseFloat(document.getElementById('t1-resolution')?.value || 0.01); drift = parseFloat(document.getElementById('t4-drift')?.value || 0.05); }
     else { refU = parseFloat(document.getElementById('hist-t4-u')?.textContent || 0.02); res = parseFloat(document.getElementById('hist-t1-resolution')?.textContent || 0.01); drift = parseFloat(document.getElementById('hist-t4-drift')?.textContent || 0.05); }
-    const targetConst = this.unitConstants[this.currentUnit];
     const data = prefix === '' ? this.loggerData : this.currentHistoricalData;
+    const activeUnit = prefix === '' ? this.currentUnit : (data?.output_unit || 'kgf');
+    const targetConst = this.unitConstants[activeUnit] || 1;
     const activeRows = data.measured.filter((row, idx) => idx === 0 || (row.target !== 0 && row.target !== "- -" && row.target !== ""));
     const lastActive = activeRows[activeRows.length - 1]; const maxCapKn = lastActive ? Math.abs((lastActive.target || 0) * targetConst) : 1e-9;
     const returnZero = data.measured[data.measured.length - 1]; const resInd = (returnZero && returnZero.target === 0) ? (returnZero.meanIndicatedForce || 0) : 0;
