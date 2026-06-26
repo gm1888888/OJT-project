@@ -89,7 +89,7 @@ def populate_new_format(template_path, output_path, data):
         measured = data.get("measured", [])
         results = data.get("results", [])
         num_points = len(measured)
-        extra_rows = max(0, num_points - 11)
+        extra_rows = max(0, num_points - 12)
         
         # RESTORE TEMPLATE DEFAULTS: Remove manual row shrinking. Use template heights.
         if extra_rows > 0:
@@ -220,16 +220,16 @@ def populate_new_format(template_path, output_path, data):
         preloading = data.get("preloading", [])
         for i, pt in enumerate(preloading[:3]):
             row = T2_START + i
-            write_cell((row, 2), pt.get("m1"), FMT_FORCE_2)
-            write_cell((row, 3), pt.get("s1"), FMT_MVV)
-            write_cell((row, 4), pt.get("m2"), FMT_FORCE_2)
-            write_cell((row, 6), pt.get("s2"), FMT_MVV)
-            write_cell((row, 7), pt.get("m3"), FMT_FORCE_2)
-            write_cell((row, 8), pt.get("s3"), FMT_MVV)
+            write_cell((row, 2), pt.get("m1") or 0, FMT_FORCE_2)
+            write_cell((row, 3), pt.get("s1") or 0, FMT_MVV)
+            write_cell((row, 4), pt.get("m2") or 0, FMT_FORCE_2)
+            write_cell((row, 6), pt.get("s2") or 0, FMT_MVV)
+            write_cell((row, 7), pt.get("m3") or 0, FMT_FORCE_2)
+            write_cell((row, 8), pt.get("s3") or 0, FMT_MVV)
 
         # 5. Populate All Results
         for i, res in enumerate(results):
-            pt_name = f"{i}{'st' if i==1 else 'nd' if i==2 else 'rd' if i==3 else 'th'}" if i > 0 else "0.0"
+            pt_name = "0" if i == len(results) - 1 else (f"{i}{'st' if i==1 else 'nd' if i==2 else 'rd' if i==3 else 'th'}" if i > 0 else "0.0")
             r3 = T3_START + i
             write_cell((r3, 2), pt_name)
             write_cell((r3, 3), res.get("targetForceKgf"), FMT_FORCE_2)
@@ -265,24 +265,25 @@ def populate_new_format(template_path, output_path, data):
             write_cell((r67, 11), poly_f[1], FMT_FORCE_5)
             write_cell((r67, 12), poly_f[2], FMT_FORCE_5)
             write_cell((r67, 13), res.get("meanForceKn"), FMT_FORCE_5)
-            r8 = T8_START + i
-            write_cell((r8, 3), pt_name)
-            write_cell((r8, 4), res.get("w_rep_percent"), FMT_UNC_COMP)
-            write_cell((r8, 6), res.get("w_res_percent"), FMT_UNC_COMP)
-            write_cell((r8, 7), res.get("w_std_percent"), FMT_UNC_COMP)
-            write_cell((r8, 8), res.get("w_comb_percent"), FMT_UNC_COMP)
-            write_cell((r8, 9), res.get("relative_uncertainty_percent"), FMT_UNC_EXP)
-            write_cell((r8, 10), res.get("accuracy_error_percent"), FMT_ERROR)
-            write_cell((r8, 11), res.get("repeatability_error_percent"), FMT_ERROR)
-            write_cell((r8, 12), res.get("zero_error_percent"), FMT_ERROR)
-            
-            # Formatter for Outside Class
-            classification = res.get("classification")
-            display_class = "" if classification == "Outside Class" else classification
-            write_cell((r8, 13), display_class)
+            if i < len(results) - 1:
+                r8 = T8_START + i
+                write_cell((r8, 3), pt_name)
+                write_cell((r8, 4), res.get("w_rep_percent"), FMT_UNC_COMP)
+                write_cell((r8, 6), res.get("w_res_percent"), FMT_UNC_COMP)
+                write_cell((r8, 7), res.get("w_std_percent"), FMT_UNC_COMP)
+                write_cell((r8, 8), res.get("w_comb_percent"), FMT_UNC_COMP)
+                write_cell((r8, 9), res.get("relative_uncertainty_percent"), FMT_UNC_EXP)
+                write_cell((r8, 10), res.get("accuracy_error_percent"), FMT_ERROR)
+                write_cell((r8, 11), res.get("repeatability_error_percent"), FMT_ERROR)
+                write_cell((r8, 12), res.get("zero_error_percent"), FMT_ERROR)
+                
+                # Formatter for Outside Class
+                classification = res.get("classification")
+                display_class = "" if classification == "Outside Class" else classification
+                write_cell((r8, 13), display_class)
 
         # 6. Pagination Preservation
-        last_footer_row = FOOTER_START + 10 
+        last_footer_row = FOOTER_START + 8 
         ws.api.PageSetup.PrintArea = f"$B$1:$M${last_footer_row}"
         ws.api.PageSetup.Zoom = False
         ws.api.PageSetup.FitToPagesWide = 1

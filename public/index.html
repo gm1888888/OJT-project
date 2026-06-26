@@ -103,6 +103,11 @@
                 <button id="btn-edit-standard" class="btn-small" style="padding: 2px 8px; background: #007bff;" title="Edit Selected Standard">✎</button>
                 <button id="btn-del-standard" class="btn-small" style="padding: 2px 8px; background: #dc3545;" title="Delete Selected Standard">×</button>
               </div>
+              <div style="display: flex; gap: 5px; margin-top: 5px;">
+                <button id="btn-import-standard" class="btn-small" style="flex: 1; padding: 4px 8px; background: #17a2b8;" title="Import Standard">Import Reference Standard</button>
+                <button id="btn-export-standard" class="btn-small" style="flex: 1; padding: 4px 8px; background: #8b5cf6;" title="Export Standard">Export Reference Standard</button>
+                <input type="file" id="import-standards-file" accept=".json" style="display: none;">
+              </div>
             </div>
             <div style="margin-bottom: 10px;">
               <label style="font-size: 0.85em; font-weight: bold;">System Unit:</label>
@@ -177,7 +182,12 @@
 
             </div>
             
-            <div class="controls" style="margin-top: 20px;">
+            <div class="controls" style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
+              <select id="live-reading-type" style="padding: 10px; font-size: 14px; border: 1px solid #ddd; border-radius: 4px; background: #fff;">
+                <option value="24">Net Reading (mV/V)</option>
+                <option value="23">Gross Reading (mV/V)</option>
+                <option value="25">Absolute Reading (mV/V)</option>
+              </select>
               <button id="btn-start-polling" disabled>Start Polling</button>
               <button id="btn-stop-polling" disabled>Stop Polling</button>
             </div>
@@ -220,10 +230,7 @@
               <!-- JS rows -->
             </tbody>
           </table>
-          <div style="margin-top: 5px;">
-            <button id="btn-add-t2-row" class="btn-small">+ Add Test Point</button>
-            <button id="btn-del-t2-row" class="btn-small" style="background-color: #dc3545;">- Delete Test Point</button>
-          </div>
+          <!-- Removed add/delete buttons per requirements -->
         </div>
 
         <!-- Table 3: Measured Data -->
@@ -242,10 +249,7 @@
               <!-- JS rows -->
             </tbody>
           </table>
-          <div style="margin-top: 5px;">
-            <button id="btn-add-t3-row" class="btn-small">+ Add Test Point</button>
-            <button id="btn-del-t3-row" class="btn-small" style="background-color: #dc3545;">- Delete Test Point</button>
-          </div>
+          <!-- Removed add/delete buttons per requirements -->
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">

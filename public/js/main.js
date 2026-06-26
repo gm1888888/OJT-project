@@ -82,11 +82,12 @@ class DMP41CalibrationApp {
     this.loggerData = {
       preloading: [
         { target: 0, runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }] },
-        { target: 100, runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }] }
+        { target: 100, runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }] },
+        { target: 0, runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }] }
       ],
-      measured: Array.from({ length: 11 }, (_, i) => ({
+      measured: Array.from({ length: 12 }, (_, i) => ({
         point: i,
-        target: i * 10,
+        target: (i === 0 || i === 11) ? 0 : i * 10,
         runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }],
         mean: 0,
         meanForce: 0, 
@@ -321,6 +322,47 @@ class DMP41CalibrationApp {
     if(btnEditStd) btnEditStd.onclick = () => this.openStandardModal(document.getElementById('lc-selector').value);
     const btnDelStd = document.getElementById('btn-del-standard');
     if(btnDelStd) btnDelStd.onclick = () => this.deleteStandard(document.getElementById('lc-selector').value);
+
+    const btnImportStd = document.getElementById('btn-import-standard');
+    const fileImportStd = document.getElementById('import-standards-file');
+    if (btnImportStd && fileImportStd) {
+      btnImportStd.onclick = () => fileImportStd.click();
+      fileImportStd.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const json = JSON.parse(text);
+          const res = await fetch('/api/import/standards', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(json)
+          });
+          const result = await res.json();
+          if (res.ok) {
+            alert(`Import successful. Processed standards.`);
+            await this.initLoadCellSelector();
+          } else {
+            alert(result.error || "Failed to import standards.");
+          }
+        } catch (err) {
+          alert('Failed to parse or import file: ' + err.message);
+        }
+        fileImportStd.value = '';
+      };
+    }
+
+    const btnExportStd = document.getElementById('btn-export-standard');
+    if (btnExportStd) {
+      btnExportStd.onclick = () => {
+        const selectedId = document.getElementById('lc-selector').value;
+        if (selectedId) {
+          window.open(`/api/export/standard/${selectedId}`, '_blank');
+        } else {
+          window.open(`/api/export/standards/all`, '_blank');
+        }
+      };
+    }
     const btnSaveStd = document.getElementById('btn-save-standard');
     if(btnSaveStd) btnSaveStd.onclick = () => this.saveStandard();
     const btnCloseStd = document.getElementById('close-standard');
@@ -343,10 +385,7 @@ class DMP41CalibrationApp {
 
     document.getElementById('btn-start-polling').addEventListener('click', () => this.startPolling());
     document.getElementById('btn-stop-polling').addEventListener('click', () => this.stopPolling());
-    document.getElementById('btn-add-t2-row').addEventListener('click', () => this.addTestPoint('preloading'));
-    document.getElementById('btn-add-t3-row').addEventListener('click', () => this.addTestPoint('measured'));
-    document.getElementById('btn-del-t2-row').addEventListener('click', () => this.deleteTestPoint('preloading'));
-    document.getElementById('btn-del-t3-row').addEventListener('click', () => this.deleteTestPoint('measured'));
+
 
     const btnMonitor = document.querySelector('a[href="#live-monitor"]');
     if (btnMonitor) {
@@ -949,7 +988,9 @@ class DMP41CalibrationApp {
     this.pollInterval = setInterval(async () => {
       try {
         // 1. Fetch Precision Signal (mV/V)
-        const resNet = await fetch('/api/hardware/read?channel=1&type=24'); 
+        const typeSelect = document.getElementById('live-reading-type');
+        const selectedType = typeSelect ? typeSelect.value : '24';
+        const resNet = await fetch(`/api/hardware/read?channel=1&type=${selectedType}`); 
         if (!resNet.ok) throw new Error(`HTTP error! status: ${resNet.status}`);
         const dNet = await resNet.json();
         const def = dNet.raw_deflection || 0; 
@@ -1123,6 +1164,7 @@ class DMP41CalibrationApp {
       calibration_date: d, 
       mode: m, 
       capacity_kgf: parseFloat(c) || 0, 
+      capacity_text: c,
       instrument_name: i, 
       range_text: r, 
       lc_make: lm, 
@@ -1190,7 +1232,7 @@ class DMP41CalibrationApp {
       const setTxt = (id, v) => { if(document.getElementById(id)) document.getElementById(id).textContent = v || 'N/A'; };
       setTxt('hist-t1-date', p.calibration_date ? new Date(p.calibration_date).toLocaleDateString() : 'N/A');
       setTxt('hist-client-name', p.client_name); setTxt('hist-client-address', p.client_address);
-      setTxt('hist-t1-mode', p.mode); setTxt('hist-t1-ref-no', p.project_name); setTxt('hist-t1-capacity', (p.capacity_kgf || '0') + ' kgf');
+      setTxt('hist-t1-mode', p.mode); setTxt('hist-t1-ref-no', p.project_name); setTxt('hist-t1-capacity', p.capacity_text || (p.capacity_kgf ? p.capacity_kgf + ' kgf' : '0 kgf'));
       setTxt('hist-t1-item', p.instrument_name); setTxt('hist-t1-range', p.range_text); setTxt('hist-t1-lc-make', p.lc_make); setTxt('hist-t1-lc-sn', p.lc_sn); setTxt('hist-t1-ind-make', p.ind_make); setTxt('hist-t1-ind-sn', p.ind_sn); setTxt('hist-t1-increment', p.increment); setTxt('hist-t1-resolution', p.resolution || '0.01');
       setTxt('hist-t5-temp-b', p.temperature_before); setTxt('hist-t5-temp-a', p.temperature_after); setTxt('hist-t5-hum-b', p.humidity_before); setTxt('hist-t5-hum-a', p.humidity_after);
       setTxt('hist-t4-model', p.ref_model); setTxt('hist-t4-cap', p.ref_capacity); setTxt('hist-t4-sn', p.ref_sn); setTxt('hist-t4-cert', p.ref_cert); setTxt('hist-t4-date', p.ref_date); setTxt('hist-t4-u', p.ref_unc); setTxt('hist-t4-a', p.coeff_a); setTxt('hist-t4-b', p.coeff_b); setTxt('hist-t4-c', p.coeff_c);
@@ -1198,13 +1240,21 @@ class DMP41CalibrationApp {
       this.currentHistoricalData = { 
         id: id,
         is_archived: p.is_archived === 1, 
-        preloading: Object.keys(pg).sort((a,b)=>a-b).map(k=>pg[k]), 
-        measured: r.map((x,i) => {
+        preloading: ((arr) => {
+          let res = arr.slice(0, 3);
+          while (res.length < 3) res.push({ target: 0, runs: [{m:null,r:null},{m:null,r:null},{m:null,r:null}] });
+          res[0].target = 0; res[2].target = 0; return res;
+        })(Object.keys(pg).sort((a,b)=>a-b).map(k=>pg[k])), 
+        measured: ((arr) => {
+          let res = arr.slice(0, 12);
+          while (res.length < 12) res.push({ point: res.length, target: 0, runs: [{m:null,r:null},{m:null,r:null},{m:null,r:null}], meanIndicatedForce: 0, meanRawDeflection: 0, mean: 0, meanForce: 0, netValues: [0,0,0], runForcesKn: [0,0,0], uncertainty: 0, class: 'N/A' });
+          res[0].target = 0; res[11].target = 0; return res;
+        })(r.map((x,i) => {
           const u = p.output_unit || 'kgf', s = this.unitConstants[u] || 0.00980665;
           const runs = [{ m: x.series1_m ?? x.targetForceKgf, r: x.series1_mvv || 0 }, { m: x.series2_m ?? x.targetForceKgf, r: x.series2_mvv || 0 }, { m: x.series3_m ?? x.targetForceKgf, r: x.series3_mvv || 0 }];
           const am = runs.map(z=>z.m).filter(z=>z!==0), ar = runs.map(z=>z.r).filter(z=>z!==0);
           return { point: i, target: x.targetForceKgf || 0, runs, meanIndicatedForce: am.length?am.reduce((a,b)=>a+b)/am.length:0, meanRawDeflection: ar.length?ar.reduce((a,b)=>a+b)/ar.length:0, mean: x.meanNetDeflection || 0, meanForce: (x.meanForceKn || 0) / s, netValues: x.netValues || [0,0,0], runForcesKn: x.runForcesKn || [0,0,0], uncertainty: x.expandedUncertaintyPercent || 0, class: x.classification || 'N/A' };
-      })};
+      }))};
       this.calculateFullSuite('hist-'); this.renderReplicaTables('hist-');
       document.querySelectorAll('.hist-sys-unit').forEach(el => {
         el.textContent = p.output_unit || 'kgf';
@@ -1258,7 +1308,7 @@ class DMP41CalibrationApp {
         const d = await res.json();
         const p = d.metadata;
         const setVal = (id, val) => { const el = document.getElementById(id); if (el) { el.value = val; el.dispatchEvent(new Event('input')); } };
-        setVal('t1-ref-no', p.project_name); setVal('t1-capacity', p.capacity_kgf);
+        setVal('t1-ref-no', p.project_name); setVal('t1-capacity', p.capacity_text || (p.capacity_kgf ? p.capacity_kgf + ' kgf' : ''));
         setVal('t1-item', p.instrument_name); setVal('t1-range', p.range_text);
         setVal('t1-lc-make', p.lc_make); setVal('t1-lc-sn', p.lc_sn);
         setVal('t1-ind-make', p.ind_make); setVal('t1-ind-sn', p.ind_sn);
@@ -1505,40 +1555,7 @@ class DMP41CalibrationApp {
     };
   }
 
-  addTestPoint(tableType) {
-    const newPoint = { target: 0, runs: [{ m: null, r: null }, { m: null, r: null }, { m: null, r: null }] };
-    if (tableType === 'measured') {
-      newPoint.point = this.loggerData.measured.length;
-      newPoint.mean = 0; newPoint.meanForce = 0; newPoint.uncertainty = 0; newPoint.class = 'N/A';
-      this.loggerData.measured.push(newPoint);
-    } else {
-      const lastIndex = this.loggerData.preloading.length - 1;
-      this.loggerData.preloading.splice(lastIndex, 0, newPoint);
-    }
-    this.renderLogger();
-  }
 
-  deleteTestPoint(tableType) {
-    if (tableType === 'measured') {
-      if (this.loggerData.measured.length <= 1) { alert("Cannot delete base point."); return; }
-      const maxIdx = this.loggerData.measured.length - 1;
-      const idxStr = prompt(`Enter test point index (1 to ${maxIdx}):`);
-      if (!idxStr) return;
-      const idx = parseInt(idxStr, 10);
-      if (isNaN(idx) || idx < 1 || idx > maxIdx) { alert("Invalid index."); return; }
-      this.loggerData.measured.splice(idx, 1);
-      this.loggerData.measured.forEach((p, i) => { p.point = i; });
-    } else {
-      if (this.loggerData.preloading.length <= 2) { alert("Cannot delete base points."); return; }
-      const lastIndex = this.loggerData.preloading.length - 1;
-      const idxStr = prompt(`Enter test point index (1 to ${lastIndex - 1}):`);
-      if (!idxStr) return;
-      const idx = parseInt(idxStr, 10);
-      if (isNaN(idx) || idx < 1 || idx >= lastIndex) { alert("Invalid index."); return; }
-      this.loggerData.preloading.splice(idx, 1);
-    }
-    this.renderLogger();
-  }
 
   renderLogger() { this.renderReplicaTables(''); }
 
@@ -1555,7 +1572,7 @@ class DMP41CalibrationApp {
         const v1m = this.formatCellValue(row.runs[0].m); const v1r = this.formatCellValue(row.runs[0].r, false, true);
         const v2m = this.formatCellValue(row.runs[1].m); const v2r = this.formatCellValue(row.runs[1].r, false, true);
         const v3m = this.formatCellValue(row.runs[2].m); const v3r = this.formatCellValue(row.runs[2].r, false, true);
-        const rowLabel = idx === 0 ? '0.0' : (idx === data.preloading.length - 1 ? 'Max Cap' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th'));
+        const rowLabel = idx === 0 ? '0.0' : (idx === data.preloading.length - 1 ? '0.0' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th'));
         return `<tr><td>${rowLabel}</td><td class="selectable" data-tab="2" data-row="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td><td class="selectable" data-tab="2" data-row="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td><td class="selectable" data-tab="2" data-row="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td><td class="selectable" data-tab="2" data-row="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td><td class="selectable" data-tab="2" data-row="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td><td class="selectable" data-tab="2" data-row="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td></tr>`;
       }).join('');
     }
@@ -1568,7 +1585,9 @@ class DMP41CalibrationApp {
         const v1m = this.formatCellValue(row.runs[0].m); const v1r = this.formatCellValue(row.runs[0].r, false, true);
         const v2m = this.formatCellValue(row.runs[1].m); const v2r = this.formatCellValue(row.runs[1].r, false, true);
         const v3m = this.formatCellValue(row.runs[2].m); const v3r = this.formatCellValue(row.runs[2].r, false, true);
-        return `<tr><td>${idx === 0 ? '0.0' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th')}</td><td><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${vt === "" ? 'l-t placeholder-dull' : 'l-t'}" data-idx="${idx}" value="${vt}" placeholder="- -"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td><td class="calculated" id="${prefix}t3-meanforce-${idx}">${row.meanIndicatedForce ? row.meanIndicatedForce.toFixed(2) : '- -'}</td><td class="calculated" id="${prefix}t3-meandef-${idx}">${row.meanRawDeflection ? row.meanRawDeflection.toFixed(6) : '- -'}</td></tr>`;
+        const isFixedZero = (idx === 0 || idx === data.measured.length - 1);
+        const disabledAttrTarget = (prefix !== '' || isFixedZero) ? 'disabled' : '';
+        return `<tr><td>${idx === 0 ? '0.0' : idx === data.measured.length - 1 ? '0.0' : idx + (idx === 1 ? 'st' : idx === 2 ? 'nd' : idx === 3 ? 'rd' : 'th')}</td><td><input type="text" ${disabledAttrTarget} class="${vt === "" ? 'l-t placeholder-dull' : 'l-t'}" data-idx="${idx}" value="${isFixedZero ? '0' : vt}" placeholder="- -"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1m)}" value="${v1m}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="1" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v1r)}" value="${v1r}" placeholder="- -" data-idx="${idx}" data-run="1" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2m)}" value="${v2m}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="2" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v2r)}" value="${v2r}" placeholder="- -" data-idx="${idx}" data-run="2" data-type="r"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="m"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3m)}" value="${v3m}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="m"></td><td class="selectable" data-tab="3" data-idx="${idx}" data-run="3" data-type="r"><input type="text" ${prefix !== '' ? 'disabled' : ''} class="${getCls(v3r)}" value="${v3r}" placeholder="- -" data-idx="${idx}" data-run="3" data-type="r"></td><td class="calculated" id="${prefix}t3-meanforce-${idx}">${row.meanIndicatedForce ? row.meanIndicatedForce.toFixed(2) : '- -'}</td><td class="calculated" id="${prefix}t3-meandef-${idx}">${row.meanRawDeflection ? row.meanRawDeflection.toFixed(6) : '- -'}</td></tr>`;
       }).join('');
     }
 

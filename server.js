@@ -1138,10 +1138,10 @@ app.post('/api/export/excel/live', async (req, res) => {
             zeroBaseline3: z3,
             coeffA: exportData.coeff_a, coeffB: exportData.coeff_b, coeffC: exportData.coeff_c,
             maxCapacityKgf: exportData.capacity_kgf,
-            resolution_kgf: 0.01,
-            cal_uncertainty_percent: exportData.ref_unc,
-            temperature_change_c: Math.abs(exportData.temp_after - exportData.temp_before),
-            sensitivity_ppm_per_c: 20
+            resolution_kgf: parseFloat(exportData.resolution) || 0.01,
+            calUncertainty_percent: exportData.ref_unc,
+            temperatureChange_c: Math.abs((exportData.temp_after || 0) - (exportData.temp_before || 0)),
+            sensitivity_ppm: 20
          });
          results.push(ptResult);
       });
@@ -1228,10 +1228,10 @@ app.post('/api/export/pdf/live', async (req, res) => {
             zeroBaseline3: z3,
             coeffA: exportData.coeff_a, coeffB: exportData.coeff_b, coeffC: exportData.coeff_c,
             maxCapacityKgf: exportData.capacity_kgf,
-            resolution_kgf: 0.01,
-            cal_uncertainty_percent: exportData.ref_unc,
-            temperature_change_c: Math.abs(exportData.temp_after - exportData.temp_before),
-            sensitivity_ppm_per_c: 20
+            resolution_kgf: parseFloat(exportData.resolution) || 0.01,
+            calUncertainty_percent: exportData.ref_unc,
+            temperatureChange_c: Math.abs((exportData.temp_after || 0) - (exportData.temp_before || 0)),
+            sensitivity_ppm: 20
          });
          results.push(ptResult);
       });
@@ -1348,6 +1348,76 @@ app.delete('/api/config/load-cells/:id', (req, res) => {
   try {
     db.prepare('DELETE FROM load_cells_reference WHERE id = ?').run(req.params.id);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/export/standards/all', (req, res) => {
+  try {
+    const stmt = db.prepare('SELECT * FROM load_cells_reference');
+    const rows = stmt.all();
+    res.json({ version: "1.0", type: "REFERENCE_STANDARDS_BUNDLE", standards: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/export/standard/:id', (req, res) => {
+  try {
+    const stmt = db.prepare('SELECT * FROM load_cells_reference WHERE id = ?');
+    const row = stmt.get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Standard not found' });
+    res.json({ version: "1.0", type: "REFERENCE_STANDARD_SINGLE", standard: row });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/import/standards', (req, res) => {
+  try {
+    const data = req.body;
+    let standards = [];
+    if (data.type === 'REFERENCE_STANDARDS_BUNDLE' && Array.isArray(data.standards)) {
+      standards = data.standards;
+    } else if (data.type === 'REFERENCE_STANDARD_SINGLE' && data.standard) {
+      standards = [data.standard];
+    } else {
+      return res.status(400).json({ error: 'Invalid file format.' });
+    }
+
+    db.exec('BEGIN TRANSACTION');
+    let processed = 0;
+    try {
+      const insertStmt = db.prepare(`
+        INSERT INTO load_cells_reference 
+        (model, description, capacity_kn, serial_number, calibration_certificate, calibration_date, coeff_a_compression, coeff_b_compression, coeff_c_compression, uncertainty_compression_percent, coeff_a_tension, coeff_b_tension, coeff_c_tension, uncertainty_tension_percent, next_calibration_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      for (const s of standards) {
+        let finalModel = s.model;
+        let finalSn = s.serial_number;
+        let existing = db.prepare('SELECT id FROM load_cells_reference WHERE serial_number = ? OR model = ?').get(finalSn, finalModel);
+        if (existing) {
+          const suffix = " (Imported " + Math.floor(Math.random() * 1000) + ")";
+          finalModel += suffix;
+          finalSn += suffix;
+        }
+        
+        insertStmt.run(
+          finalModel, s.description, s.capacity_kn, finalSn, s.calibration_certificate, s.calibration_date,
+          s.coeff_a_compression, s.coeff_b_compression, s.coeff_c_compression, s.uncertainty_compression_percent,
+          s.coeff_a_tension, s.coeff_b_tension, s.coeff_c_tension, s.uncertainty_tension_percent, s.next_calibration_date
+        );
+        processed++;
+      }
+      db.exec('COMMIT');
+      res.json({ success: true, processed });
+    } catch (innerErr) {
+      db.exec('ROLLBACK');
+      throw innerErr;
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
