@@ -23,35 +23,35 @@ body {
 .system-header {
     text-align: center;
     margin-bottom: 1.5rem;
-    border-bottom: 1px solid #001D53; 
+    border-bottom: 1px solid #001D53;
     padding-bottom: 1.5rem;
 }
 
 .system-logo {
     display: block;
-    width: 100%; 
-    max-height: 100px; 
-    object-fit: contain; 
-    margin: 0 auto 15px auto; 
+    width: 100%;
+    max-height: 100px;
+    object-fit: contain;
+    margin: 0 auto 15px auto;
 }
 
 /* DMP41 CALIBRATION SYSTEM*/
 .main-system-title {
-    font-size: 1.4rem; 
+    font-size: 1.4rem;
     font-weight: 800;
     color: #001D53;
     line-height: 1.2;
-    margin: 0; 
+    margin: 0;
 }
 
 
 .form-subtitle {
     display: block;
     width: 100%;
-    text-align: center !important; 
-    font-size: 1.4rem; 
-    font-weight: 800;  
-    color: #111;       
+    text-align: center !important;
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #111;
     margin-top: 0;
     margin-bottom: 1.5rem;
 }
@@ -63,20 +63,20 @@ form {
 /* --- Input Group & Icons --- */
 .input-group {
     position: relative;
-    margin-bottom: 1.5rem; 
+    margin-bottom: 1.5rem;
 }
 
 .input-group > i:first-child {
     position: absolute;
     color: black;
     left: 0;
-    top: 10px; 
+    top: 10px;
 }
 
 .toggle-password {
     position: absolute;
     right: 0;
-    top: 10px; 
+    top: 10px;
     cursor: pointer;
     color: gray;
     z-index: 10;
@@ -93,7 +93,7 @@ input {
     background-color: transparent;
     border: none;
     border-bottom: 1px solid black;
-    padding: 10px 30px; 
+    padding: 10px 30px;
     font-size: 15px;
 }
 
@@ -110,16 +110,16 @@ input::placeholder {
 /* email and password label*/
 label {
     color: gray;
-    position: absolute; 
-    left: 30px; 
+    position: absolute;
+    left: 30px;
     top: 10px;
     cursor: auto;
     transition: 0.3s ease all;
-    pointer-events: none; 
+    pointer-events: none;
 }
- 
+
 /*floating labels*/
-input:focus ~ label, 
+input:focus ~ label,
 input:not(:placeholder-shown) ~ label {
     top: -15px;
     color:#001D53;
@@ -144,7 +144,7 @@ input:not(:placeholder-shown) ~ label {
     text-decoration: underline;
 }
 
-.btn { 
+.btn {
     font-size: 1.1rem;
     padding: 8px 0;
     border-radius: 5px;
@@ -159,39 +159,6 @@ input:not(:placeholder-shown) ~ label {
 
 .btn:hover {
     background: #001D53;
-}
-
-.or {
-    font-size: 1.1rem;
-    margin-top: 0.5rem;
-    text-align: center;
-}
-
-.icons {
-    text-align: center;
-}
-
-.icons i {
-    color: black;
-    padding: 0.8rem 1.5rem;
-    border-radius: 10px;
-    font-size: 1.5rem;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid #ccc;
-    margin: 0 10px;
-    width: 70px;  
-    height: 50px;
-}
-
-.icons i:hover {
-    background: #99CC33;
-    font-size: 1.6rem;
-    opacity: 100%;
-    border: 2px solid #ccc;
-    color: white;
 }
 
 .links {

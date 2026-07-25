@@ -1,8 +1,4 @@
 class CalibrationEngine {
-  constructor() {
-    this.gravityConstant = 0.00980665; // 1 kgf in kN
-  }
-
   // F = AD + BD² + CD³ (Polynomial equation)
   calculateEquivalentForce(rawDeflectionMvv, coeffA, coeffB, coeffC) {
     const D = rawDeflectionMvv;
@@ -20,15 +16,13 @@ class CalibrationEngine {
   // ISO 376 Uncertainty Calculation
   calculateUncertainty(params) {
     const {
-      repeatability_kn,
       resolution_kn,
       tare_uncertainty_kn,
       cal_uncertainty_percent,
       drift_percent = 0.05,
       temperature_change_c,
       sensitivity_ppm_per_c,
-      reference_force_kn,
-      num_runs = 3
+      reference_force_kn
     } = params;
 
     const abs_ref = Math.abs(reference_force_kn);
@@ -44,11 +38,9 @@ class CalibrationEngine {
 
     // Standard uncertainties (absolute in kN)
     // Legacy mapping: Type B rectangular distribution using relative range b_i (params.rep_b_percent)
-    const u_rep = params.rep_b_percent !== undefined ? (params.rep_b_percent / 100 * abs_ref) / Math.sqrt(12) : (repeatability_kn / Math.sqrt(num_runs));
-    const u_res = resolution_kn / (2 * Math.sqrt(3)); 
+    const u_rep = (params.rep_b_percent / 100 * abs_ref) / Math.sqrt(12);
+    const u_res = resolution_kn / (2 * Math.sqrt(3));
     const u_tare = tare_uncertainty_kn;
-    const u_cal = (cal_uncertainty_percent / 100) * abs_ref;
-    const u_temp = (sensitivity_ppm_per_c * temperature_change_c / 1e6) * abs_ref;
 
     // Relative standard uncertainties (%) - Capped at 999.999% to prevent Excel '######'
     const cap = (v) => Math.min(v, 999.999);
@@ -83,13 +75,32 @@ class CalibrationEngine {
     };
   }
 
-  // ISO 376 Classification
-  classifyMeasurement(relativeUncertaintyPercent) {
-    const u = parseFloat(relativeUncertaintyPercent);
-    if (u <= 0.05) return 'Class 0';
-    if (u <= 0.1) return 'Class 1';
-    if (u <= 0.2) return 'Class 2';
-    if (u <= 0.5) return 'Class 3';
+  // ISO 7500-1:2015 Clause 7 / Table 2 classification.
+  // A calibration point (or range) conforms to a class only if EVERY relevant
+  // characteristic is within that class's maximum permissible value. The best
+  // (tightest) class whose limits are all satisfied is returned.
+  // v (reversibility) is only assessed "when required" (Table 2 footnote a); pass
+  // null to omit it from the check.
+  classifyMeasurement(q, b, f0, a, v = null) {
+    const aq = Math.abs(parseFloat(q));
+    const ab = Math.abs(parseFloat(b));
+    const af0 = Math.abs(parseFloat(f0));
+    const aa = Math.abs(parseFloat(a));
+    const av = (v === null || v === undefined || isNaN(parseFloat(v))) ? null : Math.abs(parseFloat(v));
+
+    // Table 2 — maximum permissible values (%)
+    const CLASSES = [
+      { name: 'Class 0.5', q: 0.5, b: 0.5, v: 0.75, f0: 0.05, a: 0.25 },
+      { name: 'Class 1',   q: 1.0, b: 1.0, v: 1.5,  f0: 0.10, a: 0.50 },
+      { name: 'Class 2',   q: 2.0, b: 2.0, v: 3.0,  f0: 0.20, a: 1.00 },
+      { name: 'Class 3',   q: 3.0, b: 3.0, v: 4.5,  f0: 0.30, a: 1.50 }
+    ];
+
+    for (const c of CLASSES) {
+      if (aq <= c.q && ab <= c.b && af0 <= c.f0 && aa <= c.a && (av === null || av <= c.v)) {
+        return c.name;
+      }
+    }
     return 'Outside Class';
   }
 
@@ -101,8 +112,6 @@ class CalibrationEngine {
       series1_m = null, series2_m = null, series3_m = null,
       series1_mvv = null, series2_mvv = null, series3_mvv = null,
       zeroBaseline1 = null, zeroBaseline2 = null, zeroBaseline3 = null,
-      residualZero1 = null, residualZero2 = null, residualZero3 = null,
-      maxCapacityKn = null,
       coeffA, coeffB, coeffC,
       calUncertainty_percent,
       drift_percent = 0.05,
@@ -115,7 +124,6 @@ class CalibrationEngine {
     const s3_corrected = (series3_mvv !== null && zeroBaseline3 !== null) ? series3_mvv - zeroBaseline3 : null;
     
     const netValues = [s1_corrected, s2_corrected, s3_corrected];
-    const activeNets = netValues.filter(v => v !== null);
     const activeRs = [series1_mvv, series2_mvv, series3_mvv].filter(v => v !== null);
 
     // Interpolated Deflection (Target is in selected unit, M is in selected unit)
@@ -145,53 +153,69 @@ class CalibrationEngine {
       }
     }
 
-    // Error analysis
+    // Error analysis — ISO 7500-1:2015 §6.5
     const targetForceKn = targetForceKgf * unit_scale;
     const abs_mean_kn = Math.abs(mean_kn) || 1e-9;
-    
-    // Authoritative Guard: Avoid division by zero for error percentages
-    let accu_q = 0;
-    let rep_b = 0;
-    
-    if (abs_mean_kn > 1e-9) {
-        // Relative accuracy error qi (%) = (Target - Reference) / Reference * 100
-        accu_q = ((targetForceKn - mean_kn) / abs_mean_kn) * 100;
 
-        // Relative repeatability error b (%) = (Max - Min) / Mean * 100
+    // §6.5.1 Formulae (10)-(13): relative indication error is computed PER SERIES,
+    // then averaged. Fi = the nominal indicated (target) force, held constant across
+    // the three series; F = the per-series reference force from the proving instrument.
+    const qSeries = runForcesKn.map(f =>
+      (f !== null && Math.abs(f) > 1e-9) ? ((targetForceKn - f) / f) * 100 : null
+    );
+    const activeQ = qSeries.filter(v => v !== null);
+    const accu_q = activeQ.length > 0 ? activeQ.reduce((a, b) => a + b, 0) / activeQ.length : 0;
+
+    // §6.5.2 Formula (14): relative repeatability error b = qmax − qmin
+    // (algebraic maximum and minimum of the per-series q values).
+    const rep_b = activeQ.length > 1 ? (Math.max(...activeQ) - Math.min(...activeQ)) : 0;
+
+    // §6.3 Formula (4): relative resolution a = r / Fi × 100 at this calibration point,
+    // where r is the machine indicator's resolution and Fi is the indicated (target) force.
+    const res_unit = parseFloat(params.resolution_kgf) || 0.01;
+    const rel_res_a = Math.abs(targetForceKgf) > 1e-9 ? (Math.abs(res_unit) / Math.abs(targetForceKgf)) * 100 : 0;
+
+    // Legacy repeatability range (%), retained ONLY to feed the unchanged uncertainty
+    // budget below (Annex C); it does not drive classification.
+    let rep_b_legacy = 0;
+    if (abs_mean_kn > 1e-9) {
         const range = activeForces.length > 1 ? Math.max(...activeForces) - Math.min(...activeForces) : 0;
-        rep_b = (range / abs_mean_kn) * 100;
+        rep_b_legacy = (range / abs_mean_kn) * 100;
     }
 
     // Uncertainty
     const res_kn = (parseFloat(params.resolution_kgf) || 0.01) * unit_scale;
 
     const uncertaintyParams = {
-      repeatability_kn: s_dev_kn,
-      rep_b_percent: rep_b,
-      resolution_kn: res_kn, 
+      rep_b_percent: rep_b_legacy,
+      resolution_kn: res_kn,
       tare_uncertainty_kn: 1e-7,
       cal_uncertainty_percent: calUncertainty_percent,
       drift_percent: drift_percent,
       temperature_change_c: temperatureChange_c,
       sensitivity_ppm_per_c: params.sensitivity_ppm || 50,
-      reference_force_kn: mean_kn,
-      num_runs: activeForces.length
+      reference_force_kn: mean_kn
     };
 
     const uncertainty = this.calculateUncertainty(uncertaintyParams);
 
-    // Classification
-    const classification = this.classifyMeasurement(uncertainty.relative_uncertainty_percent);
-
-    // Relative zero error f0 (%) = (Residual Indication / Max Capacity) * 100
+    // §6.4.5 Formula (5): relative zero error f0 = Fi0 / FN × 100, where
+    // Fi0 is the residual indication of the machine after force removal and
+    // FN is the maximum value of the calibrated range (both in the selected unit,
+    // so the ratio is unit-independent). The sign is retained for reporting; the
+    // magnitude is used for the Table 2 comparison.
     let f0 = 0;
-    if (maxCapacityKn && maxCapacityKn > 0) {
-        const residuals = [residualZero1, residualZero2, residualZero3].filter(v => v !== null);
-        if (residuals.length > 0) {
-            const meanResidual = residuals.reduce((a, b) => a + b, 0) / residuals.length;
-            f0 = (Math.abs(meanResidual * unit_scale) / maxCapacityKn) * 100;
-        }
+    const Fi0 = parseFloat(params.residualIndication);
+    const FN = parseFloat(params.maxRangeForce);
+    if (!isNaN(Fi0) && !isNaN(FN) && Math.abs(FN) > 1e-9) {
+        f0 = (Fi0 / FN) * 100;
     }
+
+    // Classification — ISO 7500-1:2015 Clause 7 / Table 2 (q, b, f0, a).
+    // The zero / return-to-zero point (no applied force) is not classified.
+    const classification = (targetForceKgf === 0 || activeForces.length === 0)
+        ? ''
+        : this.classifyMeasurement(accu_q, rep_b, f0, rel_res_a);
 
     const meanRawDeflection = activeRs.length > 0 ? activeRs.reduce((a, b) => a + b) / activeRs.length : null;
 
@@ -213,14 +237,15 @@ class CalibrationEngine {
       series2_kn: s2_kn,
       series3_kn: s3_kn,
       meanForceKn: mean_kn,
-      meanForce: mean_kn !== null ? mean_kn / unit_scale : null,
+      meanForce: mean_kn / unit_scale,
       repeatability_kn: s_dev_kn,
       uncertainty_kn: uncertainty.expanded_uncertainty_kn,
       relative_uncertainty_percent: uncertainty.relative_uncertainty_percent,
-      accuracy_error_percent: accu_q !== null ? parseFloat(accu_q.toFixed(6)) : null,
-      relative_error_percent: accu_q !== null ? parseFloat(accu_q.toFixed(6)) : null,
-      repeatability_error_percent: rep_b !== null ? parseFloat(rep_b.toFixed(6)) : null,
-      zero_error_percent: f0 !== null ? parseFloat(f0.toFixed(6)) : null,
+      accuracy_error_percent: parseFloat(accu_q.toFixed(6)),        // q  (§6.5.1)
+      relative_error_percent: parseFloat(accu_q.toFixed(6)),        // q  (alias)
+      repeatability_error_percent: parseFloat(rep_b.toFixed(6)),    // b  (§6.5.2)
+      relative_resolution_percent: parseFloat(rel_res_a.toFixed(6)),// a  (§6.3)
+      zero_error_percent: parseFloat(f0.toFixed(6)),                // f0 (§6.4.5)
       w_res_percent: uncertainty.components.resolution,
       w_rep_percent: uncertainty.components.repeatability,
       w_std_percent: uncertainty.components.calibration !== null ? Math.sqrt(Math.pow(uncertainty.components.calibration, 2) + Math.pow(uncertainty.components.drift, 2)) : null,

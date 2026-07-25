@@ -133,12 +133,6 @@ button:disabled {
 #btn-new-project { background-color: var(--accent-color); color: #001D53; font-weight: bold; }
 #btn-new-project:hover:not(:disabled) { background-color: var(--accent-hover); box-shadow: 0 4px 6px -1px rgba(153, 204, 51, 0.3); }
 
-#btn-edit-project { background-color: var(--primary-color); color: #ffffff; }
-#btn-edit-project:hover:not(:disabled) { background-color: var(--primary-hover); box-shadow: 0 4px 6px -1px rgba(0, 29, 83, 0.3); }
-
-#btn-load-demo { background-color: var(--primary-color); color: #ffffff; }
-#btn-load-demo:hover:not(:disabled) { background-color: var(--primary-hover); }
-
 #btn-save-history { background-color: var(--accent-color); color: #001D53; font-weight: bold; }
 #btn-save-history:hover:not(:disabled) { background-color: var(--accent-hover); box-shadow: 0 4px 6px -1px rgba(153, 204, 51, 0.3); }
 
@@ -242,20 +236,6 @@ tbody tr:nth-child(even) {
 .controls {
   margin-top: 15px;
 }
-
-.action-bar {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 15px;
-}
-
-#current-project-display {
-  font-weight: bold;
-  color: #000;
-}
-.clickable { cursor: pointer; color: #000; }
-.clickable:hover { text-decoration: underline; }
 
 /* Excel Replica Table Styles */
 .excel-table {
@@ -524,11 +504,6 @@ tbody tr:nth-child(even) {
   color: var(--text-muted);
 }
 
-.modal-actions {
-  text-align: right;
-  margin-top: 20px;
-}
-
 /* Floating Mini Window Styles */
 @keyframes popInBottomLeft {
   0% {
@@ -679,5 +654,3 @@ tbody tr:nth-child(even) {
   from { transform: translateY(100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
-
-

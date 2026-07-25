@@ -118,8 +118,8 @@ def populate_new_format(template_path, output_path, data):
         FOOTER_START = 101 + 4*extra_rows
         
         # Overwrite hardcoded unit headers with dynamic output unit
-        ws.range("B15").value = f"2.) PRE-LOADING DATA, {output_unit}"
-        ws.range("B22").value = f"3.) MEASURED DATA, {output_unit}"
+        ws.range("B15").value = f"1.) PRE-LOADING DATA, {output_unit}"
+        ws.range("B22").value = f"2.) MEASURED DATA, {output_unit}"
         # We need to write to the exact header cells to overwrite "kgf" or "units in kN"
         # Table 3 Target Force header
         # The original template expects the text in row 24, not 23.

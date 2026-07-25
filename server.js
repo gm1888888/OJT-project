@@ -10,6 +10,7 @@ const authMiddleware = require('./authMiddleware');
 const DMP41Interface = require('./services/dmp41_interface');
 const CalibrationEngine = require('./services/calibration_engine');
 const ExcelEngine = require('./services/excel_engine');
+const { importProjectSchema, importStandardsSchema, formatZodError } = require('./validation');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -694,6 +695,14 @@ app.get('/api/calibration/process/:project_id', (req, res) => {
     };
     const unit_scale = unitConstants[project.output_unit] || 0.00980665;
     
+    // ISO 7500-1 §6.4.5 (5) / §6.3 (4): FN = max of the calibrated range, and
+    // Fi0 = residual machine indication read at the final return-to-zero point.
+    const maxRangeForce = Math.max(...sortedSeqs.map(s => Math.abs(pointsBySeq[s].target || 0)), 1e-9);
+    const rtz = pointsBySeq[sortedSeqs[sortedSeqs.length - 1]];
+    const residualIndication = (rtz && Math.abs(rtz.target || 0) < 1e-9)
+      ? (((rtz.m1 || 0) + (rtz.m2 || 0) + (rtz.m3 || 0)) / 3)
+      : 0;
+
     const results = sortedSeqs.map(seq => {
       const data = pointsBySeq[seq];
       return calibEngine.processCalibrationPoint({
@@ -709,6 +718,8 @@ app.get('/api/calibration/process/:project_id', (req, res) => {
         zeroBaseline2: z2,
         zeroBaseline3: z3,
         max_deflection_mvv: maxDeflectionMvv,
+        residualIndication: residualIndication,
+        maxRangeForce: maxRangeForce,
         coeffA, coeffB, coeffC,
         calUncertainty_percent: calUnc,
         sensitivity_ppm: sensitivity_ppm,
@@ -813,6 +824,15 @@ function buildExportData(projectId) {
   const calUnc = parseFloat(project.ref_unc ?? 0.02) || 0.02;
   const resolution_kgf = parseFloat(project.resolution) || 0.01;
 
+  // ISO 7500-1 §6.4.5 (5) / §6.3 (4): FN = max of the calibrated range, and
+  // Fi0 = residual machine indication read at the final return-to-zero point.
+  const seqData = sortedSeqs.map(s => measuredPoints[Object.keys(measuredPoints).find(k => k.startsWith(`meas_${s}_`))]);
+  const maxRangeForce = Math.max(...seqData.map(d => Math.abs((d && d.target) || 0)), 1e-9);
+  const rtz = seqData[seqData.length - 1];
+  const residualIndication = (rtz && Math.abs(rtz.target || 0) < 1e-9)
+    ? (((rtz.m1 || 0) + (rtz.m2 || 0) + (rtz.m3 || 0)) / 3)
+    : 0;
+
   const results = sortedSeqs.map(seq => {
     const key = Object.keys(measuredPoints).find(k => k.startsWith(`meas_${seq}_`));
     const data = measuredPoints[key];
@@ -828,6 +848,8 @@ function buildExportData(projectId) {
       zeroBaseline1: z1,
       zeroBaseline2: z2,
       zeroBaseline3: z3,
+      residualIndication: residualIndication,
+      maxRangeForce: maxRangeForce,
       coeffA, coeffB, coeffC,
       calUncertainty_percent: calUnc,
       resolution_kgf: resolution_kgf,
@@ -958,16 +980,18 @@ app.get('/api/export/project/:project_id', (req, res) => {
 });
 
 app.post('/api/import/project', (req, res) => {
-  try {
-    const data = req.body;
-    
-    // We expect a single project payload for progress tracking
-    if (data.type !== 'DMP41_PROJECT_EXPORT' || !data.project) {
-      return res.status(400).json({ error: 'Invalid single project export format.' });
-    }
+  // Validate shape/types BEFORE touching the database. Reject malformed
+  // payloads with 400 instead of letting them fall through to a SQL bind
+  // error caught downstream as a 500.
+  const parsed = importProjectSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json(formatZodError(parsed.error));
+  }
+  const data = parsed.data;
 
+  try {
     const p = data.project;
-    const strat = data.duplicate_strategy || 'copy';
+    const strat = data.duplicate_strategy;
     let newName = p.project_name;
     
     const stmtCheck = db.prepare('SELECT id FROM calibration_projects WHERE project_name = ?');
@@ -1125,6 +1149,14 @@ app.post('/api/export/excel/live', async (req, res) => {
       const z2 = exportData.measured[0]?.runs?.[1]?.r || 0;
       const z3 = exportData.measured[0]?.runs?.[2]?.r || 0;
 
+      // ISO 7500-1 §6.4.5 (5) / §6.3 (4): FN = max of the calibrated range, and
+      // Fi0 = residual machine indication read at the final return-to-zero point.
+      const maxRangeForce = Math.max(...exportData.measured.map(r => Math.abs(r.target || 0)), 1e-9);
+      const lastRow = exportData.measured[exportData.measured.length - 1];
+      const residualIndication = (lastRow && Math.abs(lastRow.target || 0) < 1e-9 && lastRow.runs)
+        ? (lastRow.runs.reduce((a, rn) => a + ((rn && rn.m) || 0), 0) / (lastRow.runs.length || 1))
+        : 0;
+
       exportData.measured.forEach((row, i) => {
          const runs = row.runs || [{}, {}, {}];
          const ptResult = calibEngine.processCalibrationPoint({
@@ -1136,6 +1168,8 @@ app.post('/api/export/excel/live', async (req, res) => {
             zeroBaseline1: z1,
             zeroBaseline2: z2,
             zeroBaseline3: z3,
+            residualIndication: residualIndication,
+            maxRangeForce: maxRangeForce,
             coeffA: exportData.coeff_a, coeffB: exportData.coeff_b, coeffC: exportData.coeff_c,
             maxCapacityKgf: exportData.capacity_kgf,
             resolution_kgf: parseFloat(exportData.resolution) || 0.01,
@@ -1215,6 +1249,14 @@ app.post('/api/export/pdf/live', async (req, res) => {
       const z2 = exportData.measured[0]?.runs?.[1]?.r || 0;
       const z3 = exportData.measured[0]?.runs?.[2]?.r || 0;
 
+      // ISO 7500-1 §6.4.5 (5) / §6.3 (4): FN = max of the calibrated range, and
+      // Fi0 = residual machine indication read at the final return-to-zero point.
+      const maxRangeForce = Math.max(...exportData.measured.map(r => Math.abs(r.target || 0)), 1e-9);
+      const lastRow = exportData.measured[exportData.measured.length - 1];
+      const residualIndication = (lastRow && Math.abs(lastRow.target || 0) < 1e-9 && lastRow.runs)
+        ? (lastRow.runs.reduce((a, rn) => a + ((rn && rn.m) || 0), 0) / (lastRow.runs.length || 1))
+        : 0;
+
       exportData.measured.forEach((row, i) => {
          const runs = row.runs || [{}, {}, {}];
          const ptResult = calibEngine.processCalibrationPoint({
@@ -1226,6 +1268,8 @@ app.post('/api/export/pdf/live', async (req, res) => {
             zeroBaseline1: z1,
             zeroBaseline2: z2,
             zeroBaseline3: z3,
+            residualIndication: residualIndication,
+            maxRangeForce: maxRangeForce,
             coeffA: exportData.coeff_a, coeffB: exportData.coeff_b, coeffC: exportData.coeff_c,
             maxCapacityKgf: exportData.capacity_kgf,
             resolution_kgf: parseFloat(exportData.resolution) || 0.01,
@@ -1375,17 +1419,17 @@ app.get('/api/export/standard/:id', (req, res) => {
 });
 
 app.post('/api/import/standards', (req, res) => {
-  try {
-    const data = req.body;
-    let standards = [];
-    if (data.type === 'REFERENCE_STANDARDS_BUNDLE' && Array.isArray(data.standards)) {
-      standards = data.standards;
-    } else if (data.type === 'REFERENCE_STANDARD_SINGLE' && data.standard) {
-      standards = [data.standard];
-    } else {
-      return res.status(400).json({ error: 'Invalid file format.' });
-    }
+  // Validate shape/types BEFORE touching the database. Reject malformed
+  // payloads with 400 instead of letting them fall through to a SQL bind
+  // error caught downstream as a 500.
+  const parsed = importStandardsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json(formatZodError(parsed.error));
+  }
+  const data = parsed.data;
+  const standards = data.type === 'REFERENCE_STANDARDS_BUNDLE' ? data.standards : [data.standard];
 
+  try {
     db.exec('BEGIN TRANSACTION');
     let processed = 0;
     try {

@@ -1685,6 +1685,22 @@ class DMP41CalibrationApp {
     }).join('');
   }
 
+  // ISO 7500-1:2015 Clause 7 / Table 2 classification (mirrors CalibrationEngine.classifyMeasurement).
+  classifyISO(q, b, f0, a, v = null) {
+    const aq = Math.abs(q), ab = Math.abs(b), af0 = Math.abs(f0), aa = Math.abs(a);
+    const av = (v === null || v === undefined || isNaN(v)) ? null : Math.abs(v);
+    const CLASSES = [
+      { name: 'Class 0.5', q: 0.5, b: 0.5, v: 0.75, f0: 0.05, a: 0.25 },
+      { name: 'Class 1',   q: 1.0, b: 1.0, v: 1.5,  f0: 0.10, a: 0.50 },
+      { name: 'Class 2',   q: 2.0, b: 2.0, v: 3.0,  f0: 0.20, a: 1.00 },
+      { name: 'Class 3',   q: 3.0, b: 3.0, v: 4.5,  f0: 0.30, a: 1.50 }
+    ];
+    for (const c of CLASSES) {
+      if (aq <= c.q && ab <= c.b && af0 <= c.f0 && aa <= c.a && (av === null || av <= c.v)) return c.name;
+    }
+    return 'Outside Class';
+  }
+
   renderTable9(prefix = '') {
     const body = document.getElementById(`${prefix}t9-body`); if (!body) return;
     let refU, res, drift;
@@ -1725,20 +1741,24 @@ class DMP41CalibrationApp {
             w_res = Math.min(w_res, 999.999);
             w_comb = Math.min(w_comb, 999.999);
 
-            accu_q = (((row.target * targetConst) - row.meanForceKn) / meanKn) * 100;
-            rep_b = activeF.length > 1 ? ((Math.max(...activeF) - Math.min(...activeF)) / meanKn) * 100 : 0;
-            zero_f0 = maxCapKn > 0 ? (Math.abs(resInd * targetConst) / maxCapKn) * 100 : 0;
-            
-            if (W_exp <= 0.05) className = 'Class 0'; 
-            else if (W_exp <= 0.1) className = 'Class 1'; 
-            else if (W_exp <= 0.2) className = 'Class 2'; 
-            else if (W_exp <= 0.5) className = 'Class 3'; 
-            else className = 'Outside Class';
+            // ISO 7500-1:2015 §6.5.1 (10)-(13): relative indication error per series, then mean.
+            // Fi = nominal target (held constant across the three series); F = per-series reference force.
+            const targetKn = (row.target || 0) * targetConst;
+            const qSeries = activeF.map(f => Math.abs(f) > 1e-9 ? ((targetKn - f) / f) * 100 : null).filter(v => v !== null);
+            accu_q = qSeries.length > 0 ? qSeries.reduce((s, v) => s + v, 0) / qSeries.length : 0;
+            // §6.5.2 (14): relative repeatability error b = qmax - qmin (algebraic).
+            rep_b = qSeries.length > 1 ? (Math.max(...qSeries) - Math.min(...qSeries)) : 0;
+            // §6.4.5 (5): relative zero error f0 = Fi0 / FN * 100 (sign retained for display).
+            zero_f0 = maxCapKn > 1e-9 ? ((resInd * targetConst) / maxCapKn) * 100 : 0;
+            // §6.3 (4): relative resolution a = r / Fi * 100.
+            const rel_res_a = Math.abs(row.target) > 1e-9 ? (Math.abs(res) / Math.abs(row.target)) * 100 : 0;
+            // §7 / Table 2 classification driven by q, b, f0, a (not the uncertainty budget).
+            className = this.classifyISO(accu_q, rep_b, zero_f0, rel_res_a);
         } else {
             // It's the zero point. Keep uncertainties null but errors can be calculated if needed.
             // But usually ISO 376 doesn't calculate error % for the 0 target point if force is 0.
             className = '';
-            zero_f0 = maxCapKn > 0 ? (Math.abs(resInd * targetConst) / maxCapKn) * 100 : 0;
+            zero_f0 = maxCapKn > 1e-9 ? ((resInd * targetConst) / maxCapKn) * 100 : 0;
             accu_q = 0;
             rep_b = 0;
         }
